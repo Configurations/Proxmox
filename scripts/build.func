@@ -642,8 +642,8 @@ EOF'
 # This function sets the description of the container.
 description() {
 
-  GLOBALIP = $(curl -4 ifconfig.io)
- 
+  GLOBALIP=$(curl -4 http://ifconfig.io)
+
   IP=$(pct exec "$CTID" ip a s dev eth0 | awk '/inet / {print $2}' | cut -d/ -f1)
   pct set "$CTID" -description "<div align='center'><a href='https://$IP' target='_blank' rel='noopener noreferrer'></a>
 
