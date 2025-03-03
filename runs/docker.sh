@@ -1,12 +1,11 @@
-#!/usr/bin/env bash
-set -xe
-trap 'echo "Erreur dans le script"; exit 1' ERR
-source <(curl -s https://github.com/Configurations/Proxmox/raw/main/scripts/build.func)
-
 # Copyright (c) 2021-2024 tteck
 # Author: tteck (tteckster)
 # License: MIT
 # https://github.com/tteck/Proxmox/raw/main/LICENSE
+#!/usr/bin/env bash
+set -xe
+trap 'echo "Erreur dans le script"; exit 1' ERR
+source <(curl -s https://raw.githubusercontent.com/Configurations/Proxmox/main/scripts/build.func)
 
 function header_info {
 # clear
@@ -28,8 +27,8 @@ var_ram="2048"
 var_os="debian"
 var_version="12"
 variables
-# color()
-# catch_errors()
+color
+catch_errors()
 
 function default_settings() {
   CT_TYPE="1"
