@@ -60,6 +60,7 @@ msg_ok "Updated ${APP} LXC"
 exit
 }
 
+
 function select_application() {
   local -a MENU
   MENUAPPLY=$(curl -s https://raw.githubusercontent.com/Configurations/Proxmox/main/applications.txt)
