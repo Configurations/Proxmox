@@ -1,5 +1,5 @@
 # Proxmox
 
 
-## Install docker
-bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/runs/docker.sh)"
+## launch Install 
+bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/runs/start.sh)"
