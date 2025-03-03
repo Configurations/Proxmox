@@ -3,15 +3,6 @@ SCRIPT_URL="https://github.com/Configurations/Proxmox/raw/main/scripts/build.fun
 TMP_SCRIPT="/tmp/build.func"
 curl -s -o "$TMP_SCRIPT" "$SCRIPT_URL"
 
-# Vérifier si le fichier a été téléchargé avec succès
-if [[ -f "$TMP_SCRIPT" ]]; then
-    echo "Le script a été téléchargé avec succès."
-    source "$TMP_SCRIPT"  # Charger le script
-else
-    echo "Le téléchargement du script a échoué. Abandon."
-    exit 1
-fi
-
 # Copyright (c) 2021-2024 tteck
 # Author: tteck (tteckster)
 # License: MIT
@@ -28,6 +19,17 @@ cat <<"EOF"
  
 EOF
 }
+
+
+# Vérifier si le fichier a été téléchargé avec succès
+if [[ -f "$TMP_SCRIPT" ]]; then
+    echo "Le script a été téléchargé avec succès."
+    source "$TMP_SCRIPT"  # Charger le script
+else
+    echo "Le téléchargement du script a échoué. Abandon."
+    exit 1
+fi
+
 header_info
 echo -e "Loading..."
 APP="Docker"
