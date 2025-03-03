@@ -1,3 +1,4 @@
+set -xe
 echo -e "initializing build.func..."
 
 variables() {

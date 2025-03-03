@@ -2,7 +2,6 @@
 SCRIPT_URL="https://github.com/Configurations/Proxmox/raw/main/scripts/build.func"
 TMP_SCRIPT="/tmp/build.func"
 curl -s -o "$TMP_SCRIPT" "$SCRIPT_URL"
-
 # Copyright (c) 2021-2024 tteck
 # Author: tteck (tteckster)
 # License: MIT
@@ -16,7 +15,6 @@ cat <<"EOF"
   / / / / __ \/ ___/ //_/ _ \/ ___/
  / /_/ / /_/ / /__/ ,< /  __/ /    
 /_____/\____/\___/_/|_|\___/_/     
- 
 EOF
 }
 
