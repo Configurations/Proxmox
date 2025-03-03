@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -xe
+trap 'echo "Erreur dans le script"; exit 1' ERR
 
 SCRIPT_URL="https://github.com/Configurations/Proxmox/raw/main/scripts/build.func"
 TMP_SCRIPT="/tmp/build.func"
@@ -26,6 +27,7 @@ header_info
 if [[ -f "$TMP_SCRIPT" ]]; then
     echo "Le script a été téléchargé avec succès."
     source "$TMP_SCRIPT"  # Charger le script
+    source <(curl -s https://github.com/Configurations/Proxmox/raw/main/scripts/build.func)
 else
     echo "Le téléchargement du script a échoué. Abandon."
     exit 1
