@@ -9,7 +9,7 @@ source <(curl -s https://github.com/Configurations/Proxmox/raw/main/scripts/buil
 # https://github.com/tteck/Proxmox/raw/main/LICENSE
 
 function header_info {
-clear
+# clear
 cat <<"EOF"
     ____             __            
    / __ \____  _____/ /_  __  _____
