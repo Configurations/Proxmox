@@ -12,45 +12,11 @@ clear
 echo "install"
 }
 
-
-
-local -a MENU
-#  while read -r line; do
-#    local TAG=$(echo $line | awk '{print $1}')
-#    local TYPE=$(echo $line | awk '{printf "%-10s", $2}')
-#    local FREE=$(echo $line | numfmt --field 4-6 --from-unit=K --to=iec --format %.2f | awk '{printf( "%9sB", $6)}')
-#    local ITEM="  Type: $TYPE Free: $FREE "
-#    local OFFSET=2
-#    if [[ $((${#ITEM} + $OFFSET)) -gt ${MSG_MAX_LENGTH:-} ]]; then
-#      local MSG_MAX_LENGTH=$((${#ITEM} + $OFFSET))
-""    fi
-    MENU+=("$TAG" "ITEM1" "OFF")
-    MENU+=("$TAG" "ITEM2" "OFF")
-    MENU+=("$TAG" "ITEM3" "OFF")
-
-#  done < <(pvesm status -content $CONTENT | awk 'NR>1')
-
-
-QUESTION = "Proxmox Scripts" --title "Storage Pools" --radiolist \
-      "Which storage pool make a selection, use the Spacebar.\n"
-
-if [ $((${#MENU[@]}/3)) -eq 1 ]; then
-    printf ${MENU[0]}
-  else
-    local STORAGE
-    while [ -z "${STORAGE:+x}" ]; do
-      STORAGE=$(whiptail --backtitle QUESTION \
-      16 $(($MSG_MAX_LENGTH + 23)) 6 \
-      "${MENU[@]}" 3>&1 1>&2 2>&3) || exit "Menu aborted."
-    done
-    printf $STORAGE
-  fi
-
-
+select_application
 
 header_info
 # echo -e "Loading..."
-APP="Docker"
+#APP="Docker"
 var_disk="4"
 var_cpu="2"
 var_ram="2048"

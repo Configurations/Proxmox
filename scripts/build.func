@@ -6,6 +6,23 @@ variables() {
   INTEGER='^[0-9]+([.][0-9]+)?$'     # it defines the INTEGER regular expression pattern.
 }
 
+function select_application() {
+  local -a MENU
+  IFS=$';' read -r -d '' -a MENU_ARRAY <<< "$MENUAPPLY"
+  for item in "${MENU_ARRAY[@]}"; do
+    echo "$item"
+    MENU+=("$item" "     "  "OFF")
+  done
+  CHOIX=$(whiptail --title "Menu" --radiolist \
+   "Select an application :" 15 50 6 \
+   "${MENU[@]}" 3>&1 1>&2 2>&3)
+
+  if [ $? -eq 0 ]; then
+    APP : $CHOIX"   
+  fi
+   
+}
+
 # This function sets various color variables using ANSI escape codes for formatting text in the terminal.
 color() {
   YW=$(echo "\033[33m")
