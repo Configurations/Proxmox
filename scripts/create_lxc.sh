@@ -5,6 +5,11 @@
 # License: MIT
 # https://github.com/tteck/Proxmox/raw/main/LICENSE
 
+# Copyright (c) 2021-2024 black beard
+# Author: gael beard
+# License: MIT
+# https://github.com/Configurations/Proxmox/blob/main/LICENSE
+
 # This sets verbose mode if the global variable is set to "yes"
 # if [ "$VERBOSE" == "yes" ]; then set -x; fi
 
@@ -119,7 +124,7 @@ function select_storage() {
   else
     local STORAGE
     while [ -z "${STORAGE:+x}" ]; do
-      STORAGE=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "Storage Pools" --radiolist \
+      STORAGE=$(whiptail --backtitle "Proxmox Scripts" --title "Storage Pools" --radiolist \
       "Which storage pool you would like to use for the ${CONTENT_LABEL,,}?\nTo make a selection, use the Spacebar.\n" \
       16 $(($MSG_MAX_LENGTH + 23)) 6 \
       "${MENU[@]}" 3>&1 1>&2 2>&3) || exit "Menu aborted."
