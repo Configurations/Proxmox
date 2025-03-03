@@ -1,4 +1,4 @@
-
+#!/usr/bin/env bash
 echo "initializing build.func..."
 
 variables() {
