@@ -28,7 +28,7 @@ var_os="debian"
 var_version="12"
 variables
 color
-catch_errors()
+catch_errors
 
 function default_settings() {
   CT_TYPE="1"
