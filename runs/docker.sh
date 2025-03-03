@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+set -xe
+
 SCRIPT_URL="https://github.com/Configurations/Proxmox/raw/main/scripts/build.func"
 TMP_SCRIPT="/tmp/build.func"
 curl -s -o "$TMP_SCRIPT" "$SCRIPT_URL"
