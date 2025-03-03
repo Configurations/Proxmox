@@ -8,7 +8,7 @@ trap 'echo "Erreur dans le script"; exit 1' ERR
 source <(curl -s https://raw.githubusercontent.com/Configurations/Proxmox/main/scripts/build.func)
 
 function header_info {
-# clear
+clear
 cat <<"EOF"
     ____             __            
    / __ \____  _____/ /_  __  _____
