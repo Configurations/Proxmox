@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 set -xe
 trap 'echo "Erreur dans le script"; exit 1' ERR
+source <(curl -s https://github.com/Configurations/Proxmox/raw/main/scripts/build.func)
 
-SCRIPT_URL="https://github.com/Configurations/Proxmox/raw/main/scripts/build.func"
-TMP_SCRIPT="/tmp/build.func"
-curl -s -o "$TMP_SCRIPT" "$SCRIPT_URL"
 # Copyright (c) 2021-2024 tteck
 # Author: tteck (tteckster)
 # License: MIT
@@ -23,16 +21,6 @@ EOF
 
 header_info
 # echo -e "Loading..."
-# Vérifier si le fichier a été téléchargé avec succès
-if [[ -f "$TMP_SCRIPT" ]]; then
-    echo "Le script a été téléchargé avec succès."
-    source "$TMP_SCRIPT"  # Charger le script
-    source <(curl -s https://github.com/Configurations/Proxmox/raw/main/scripts/build.func)
-else
-    echo "Le téléchargement du script a échoué. Abandon."
-    exit 1
-fi
-
 APP="Docker"
 var_disk="4"
 var_cpu="2"
