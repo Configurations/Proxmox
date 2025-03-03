@@ -21,7 +21,7 @@ EOF
 }
 
 header_info
-echo -e "Loading..."
+# echo -e "Loading..."
 # Vérifier si le fichier a été téléchargé avec succès
 if [[ -f "$TMP_SCRIPT" ]]; then
     echo "Le script a été téléchargé avec succès."
