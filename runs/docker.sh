@@ -20,7 +20,8 @@ cat <<"EOF"
 EOF
 }
 
-
+header_info
+echo -e "Loading..."
 # Vérifier si le fichier a été téléchargé avec succès
 if [[ -f "$TMP_SCRIPT" ]]; then
     echo "Le script a été téléchargé avec succès."
@@ -30,8 +31,6 @@ else
     exit 1
 fi
 
-header_info
-echo -e "Loading..."
 APP="Docker"
 var_disk="4"
 var_cpu="2"
