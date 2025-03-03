@@ -60,6 +60,22 @@ msg_ok "Updated ${APP} LXC"
 exit
 }
 
+function select_application() {
+  local -a MENU
+  MENUAPPLY=$(curl -s https://raw.githubusercontent.com/Configurations/Proxmox/main/applications.txt)
+  IFS=$';' read -r -d '' -a MENU_ARRAY <<< "$MENUAPPLY"
+  for item in "${MENU_ARRAY[@]}"; do
+    echo "$item"
+    MENU+=("$item" "     "  "OFF")
+  done
+  CHOIX=$(whiptail --title "Menu" --radiolist \
+   "Select an application :" 15 50 6 \
+   "${MENU[@]}" 3>&1 1>&2 2>&3)
+  if [ $? -eq 0 ]; then
+    APP=$CHOIX
+  fi
+}
+
 start
 build_container
 description
