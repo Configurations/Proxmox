@@ -530,9 +530,9 @@ build_container() {
 #  if [ "$VERB" == "yes" ]; then set -x; fi
 
   if [ "$CT_TYPE" == "1" ]; then
-    FEATURES="keyctl=1,nesting=1"
+    FEATURES="mount=nfs;cifs,keyctl=1,nesting=1"
   else
-    FEATURES="nesting=1"
+    FEATURES="mount=nfs;cifs,nesting=1"
   fi
 
 
