@@ -24,6 +24,7 @@ function select_application() {
    "Select an application :" 15 50 6 \
    "${MENU[@]}" 3>&1 1>&2 2>&3)
   if [ $? -eq 0 ]; then
+    CHOIX=${CHOIX//_/}
     APP=$CHOIX
   fi
 }
