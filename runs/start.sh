@@ -3,7 +3,7 @@
 # License: MIT
 # https://github.com/tteck/Proxmox/raw/main/LICENSE
 #!/usr/bin/env bash
-# set -xe
+set -xe
 trap 'echo "Erreur dans le script"; exit 1' ERR
 source <(curl -s https://raw.githubusercontent.com/Configurations/Proxmox/main/scripts/build.func)
 
