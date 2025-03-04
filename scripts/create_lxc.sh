@@ -184,7 +184,7 @@ PCT_OPTIONS=(${PCT_OPTIONS[@]:-${DEFAULT_PCT_OPTIONS[@]}})
 
   PCT_OPTIONS_STRING=""
   for item in "${PCT_OPTIONS[@]}"; do
-    PCT_OPTIONS_STRING+="$item "
+    PCT_OPTIONS_STRING+="$item\n"
   done
 
 # Create container
