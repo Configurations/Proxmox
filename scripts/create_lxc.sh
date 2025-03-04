@@ -181,8 +181,14 @@ DEFAULT_PCT_OPTIONS=(
 PCT_OPTIONS=(${PCT_OPTIONS[@]:-${DEFAULT_PCT_OPTIONS[@]}})
 [[ " ${PCT_OPTIONS[@]} " =~ " -rootfs " ]] || PCT_OPTIONS+=(-rootfs $CONTAINER_STORAGE:${PCT_DISK_SIZE:-8})
 
+
+  PCT_OPTIONS_STRING=""
+  for item in "${PCT_OPTIONS[@]}"; do
+    PCT_OPTIONS_STRING+="$item "
+  done
+
 # Create container
 msg_info "Creating LXC Container"
 pct create $CTID ${TEMPLATE_STORAGE}:vztmpl/${TEMPLATE} ${PCT_OPTIONS[@]} >/dev/null ||
-  exit "A problem occured while trying to create container. pct create $CTID ${TEMPLATE_STORAGE}:vztmpl/${TEMPLATE} ${PCT_OPTIONS[@]}"
+  exit "A problem occured while trying to create container. pct create $CTID ${TEMPLATE_STORAGE}:vztmpl/${TEMPLATE} ${PCT_OPTIONS_STRING}"
 msg_ok "LXC Container ${BL}$CTID${CL} ${GN}was successfully created."
