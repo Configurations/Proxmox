@@ -29,10 +29,10 @@ function select_application() {
   fi
 }
 
-msg_info "prepare to install ${APP}"
 select_application
 header_info
 # echo -e "Loading..."
+echo "prepare to install ${APP}"
 var_disk="4"
 var_cpu="2"
 var_ram="2048"
