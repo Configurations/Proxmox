@@ -13,7 +13,7 @@ function select_application() {
    "${MENU[@]}" 3>&1 1>&2 2>&3)
   if [ $? -eq 0 ]; then
     CHOIX=${CHOIX//_/}
-    return "$CHOIX"    
+    echo "$CHOIX"    
   fi
 }
 
