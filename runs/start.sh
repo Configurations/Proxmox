@@ -33,6 +33,7 @@ function default_settings() {
   HN=$NSAPP
   if [$HN = "Empty"]; then
     HN="NewHost"
+    echo -e "Hostname: $HN"
   fi
   DISK_SIZE="$var_disk"
   CORE_COUNT="$var_cpu"
