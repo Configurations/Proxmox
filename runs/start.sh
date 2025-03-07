@@ -3,36 +3,20 @@
 # License: MIT
 # https://github.com/tteck/Proxmox/raw/main/LICENSE
 #!/usr/bin/env bash
-# set -xe
+set -xe
 trap 'echo "Erreur dans le script"; exit 1' ERR
 source <(curl -s https://raw.githubusercontent.com/Configurations/Proxmox/main/scripts/build.func)
 
 function header_info {
 clear
-echo "install"
+cat <<"EOF"
+Select application!
+EOF
 }
 
-function select_application() {
-  local -a MENU
-  MENUAPPLY=$(curl -s https://raw.githubusercontent.com/Configurations/Proxmox/main/applications.txt)
-  IFS=$';' read -r -d '' -a MENU_ARRAY <<< "$MENUAPPLY"
-  for item in "${MENU_ARRAY[@]}"; do
-    echo "$item"
-    MENU+=("$item" "     "  "OFF")
-  done
-  CHOIX=$(whiptail --title "Menu" --radiolist \
-   "Select an application :" 15 50 6 \
-   "${MENU[@]}" 3>&1 1>&2 2>&3)
-  if [ $? -eq 0 ]; then
-    CHOIX=${CHOIX//_/}
-    APP=$CHOIX
-  fi
-}
-
-select_application
 header_info
 # echo -e "Loading..."
-echo "prepare to install ${APP}"
+APP=APP_SELECTED=$(select_application)
 var_disk="4"
 var_cpu="2"
 var_ram="2048"
