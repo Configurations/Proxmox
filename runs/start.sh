@@ -31,9 +31,8 @@ function default_settings() {
   PW=""
   CT_ID=$NEXTID
   HN=$NSAPP
-  if [$HN = "Empty"]; then
-    HN="NewHost"
-    echo -e "Hostname: $HN"
+  if [$HN = "empty"]; then
+    HN="NewHost"    
   fi
   DISK_SIZE="$var_disk"
   CORE_COUNT="$var_cpu"
