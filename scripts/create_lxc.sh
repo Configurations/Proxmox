@@ -166,12 +166,15 @@ mapfile -t TEMPLATES < <(pveam available -section system | sed -n "s/.*\($TEMPLA
 [ ${#TEMPLATES[@]} -gt 0 ] || exit "Unable to find a template when searching for '$TEMPLATE_SEARCH'."
 TEMPLATE="${TEMPLATES[-1]}"
 
+msg_ok "selected template : ${BL}$TEMPLATE${CL}"
 # Download LXC template if needed
 if ! pveam list $TEMPLATE_STORAGE | grep -q $TEMPLATE; then
   msg_info "Downloading LXC Template"
   pveam download $TEMPLATE_STORAGE $TEMPLATE >/dev/null ||
     exit "A problem occured while downloading the LXC template."
   msg_ok "Downloaded LXC Template"
+else
+  msg_ok "LXC Template already downloaded"
 fi
 
 # Combine all options
