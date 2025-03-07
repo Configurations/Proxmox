@@ -31,6 +31,9 @@ function default_settings() {
   PW=""
   CT_ID=$NEXTID
   HN=$NSAPP
+  if ($HN == "empty") then
+    HN="NewHost"
+  fi
   DISK_SIZE="$var_disk"
   CORE_COUNT="$var_cpu"
   RAM_SIZE="$var_ram"
