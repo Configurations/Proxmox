@@ -5,15 +5,15 @@ function select_application() {
   MENUAPPLY=$(curl -s https://raw.githubusercontent.com/Configurations/Proxmox/main/applications.txt)
   IFS=$';' read -r -d '' -a MENU_ARRAY <<< "$MENUAPPLY"
   for item in "${MENU_ARRAY[@]}"; do
-    echo "$item"
     MENU+=("$item" "     "  "OFF")
   done
   CHOIX=$(whiptail --title "Menu" --radiolist \
    "Select an application :" 15 50 6 \
    "${MENU[@]}" 3>&1 1>&2 2>&3)
   if [ $? -eq 0 ]; then
-    CHOIX=${CHOIX//_/}
-    echo "$CHOIX"    
+    echo "${CHOIX//_/}"
+  else
+    echo ""
   fi
 }
 
