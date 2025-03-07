@@ -16,7 +16,7 @@ EOF
 
 header_info
 # echo -e "Loading..."
-APP=APP_SELECTED=$(select_application)
+APP=$(select_application)
 var_disk="4"
 var_cpu="2"
 var_ram="2048"
