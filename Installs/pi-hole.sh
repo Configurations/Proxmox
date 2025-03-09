@@ -5,7 +5,7 @@
 # License: MIT
 # https://github.com/tteck/Proxmox/raw/main/LICENSE
 
-## bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/installs/pi-hole.sh)"
+## bash -c "$(wget -qLO - https://raw.githubusercontent.com/Configurations/Proxmox/main/Installs/pi-hole.sh)"
 
 # if the script is launch alone without the container creation
 if [[ ! -v FUNCTIONS_FILE_PATH ]]; then
