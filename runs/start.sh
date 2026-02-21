@@ -5,7 +5,12 @@
 #!/usr/bin/env bash
 set -xe
 trap 'echo "Erreur dans le script"; exit 1' ERR
-source <(curl -s https://raw.githubusercontent.com/Configurations/Proxmox/main/scripts/build.func)
+FUNC_FILE=$(curl -s https://raw.githubusercontent.com/Configurations/Proxmox/main/scripts/build.func 2>/dev/null)
+if [ -z "$FUNC_FILE" ]; then
+  echo "Erreur : Impossible de charger les fonctions"
+  exit 1
+fi
+source <(echo "$FUNC_FILE")
 
 function header_info {
 clear

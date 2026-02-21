@@ -50,6 +50,23 @@ WantedBy=multi-user.target" >$service_path
 $STD systemctl enable --now keycloak.service
 msg_ok "Created Service"
 
+systemctl stop keycloak.service
+cd /opt/keycloak
+ADMIN_PASS=$(openssl rand -base64 16)
+bin/kc.sh bootstrap-admin user --bootstrap-admin-username temp-admin --bootstrap-admin-password "$ADMIN_PASS"
+
+# Affichage TRÈS visible du mot de passe
+echo ""
+echo "=================================================="
+echo "⚠️  KEYCLOAK ADMIN CREDENTIALS (WRITE DOWN NOW!)  ⚠️"
+echo "=================================================="
+echo "Username: temp-admin"
+echo "Password: $ADMIN_PASS"
+echo "=================================================="
+echo ""
+
+systemctl start keycloak.service
+
 motd_ssh
 customize
 

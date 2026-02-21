@@ -2,7 +2,11 @@ echo "initializing build.func..."
 
 function select_application() {
   local -a MENU
-  MENUAPPLY=$(curl -s https://raw.githubusercontent.com/Configurations/Proxmox/main/applications.txt)
+  MENUAPPLY=$(curl -s https://raw.githubusercontent.com/Configurations/Proxmox/main/applications.txt 2>/dev/null)
+  if [ -z "$MENUAPPLY" ]; then
+    msg_error "Failed to fetch applications list"
+    return 1
+  fi
   IFS=$';' read -r -d '' -a MENU_ARRAY <<< "$MENUAPPLY"
   for item in "${MENU_ARRAY[@]}"; do
     MENU+=("$item" "     "  "OFF")
@@ -103,7 +107,7 @@ shell_check() {
 
 # Run as root only
 root_check() {
-  if [[ "$(id -u)" -ne 0 || $(ps -o comm= -p $PPID) == "sudo" ]]; then
+  if [[ "$(id -u)" -ne 0 || $(ps -o comm= -p "$PPID") == "sudo" ]]; then
     clear
     msg_error "Please run this script as root."
     echo -e "\nExiting..."
@@ -120,7 +124,7 @@ pve_check() {
     echo -e "Exiting..."
     sleep 2
     exit
-fi
+  fi
 }
 
 # This function checks the system architecture and exits if it's not "amd64".
@@ -407,7 +411,7 @@ advanced_settings() {
   echo -e "${DGN}Disable IPv6: ${BGN}$DISABLEIP6${CL}"
 
   if MTU1=$(whiptail --backtitle "Proxmox Scripts" --inputbox "Set Interface MTU Size (leave blank for default)" 8 58 --title "MTU SIZE" 3>&1 1>&2 2>&3); then
-    if [ -z $MTU1 ]; then
+    if [ -z "$MTU1" ]; then
       MTU1="Default"
       MTU=""
     else
@@ -419,7 +423,7 @@ advanced_settings() {
   fi
 
   if SD=$(whiptail --backtitle "Proxmox Scripts" --inputbox "Set a DNS Search Domain (leave blank for HOST)" 8 58 --title "DNS Search Domain" 3>&1 1>&2 2>&3); then
-    if [ -z $SD ]; then
+    if [ -z "$SD" ]; then
       SX=Host
       SD=""
     else
@@ -432,7 +436,7 @@ advanced_settings() {
   fi
 
   if NX=$(whiptail --backtitle "Proxmox Scripts" --inputbox "Set a DNS Server IP (leave blank for HOST)" 8 58 --title "DNS SERVER IP" 3>&1 1>&2 2>&3); then
-    if [ -z $NX ]; then
+    if [ -z "$NX" ]; then
       NX=Host
       NS=""
     else
@@ -444,7 +448,7 @@ advanced_settings() {
   fi
 
   if MAC1=$(whiptail --backtitle "Proxmox Scripts" --inputbox "Set a MAC Address(leave blank for default)" 8 58 --title "MAC ADDRESS" 3>&1 1>&2 2>&3); then
-    if [ -z $MAC1 ]; then
+    if [ -z "$MAC1" ]; then
       MAC1="Default"
       MAC=""
     else
@@ -456,7 +460,7 @@ advanced_settings() {
   fi
 
   if VLAN1=$(whiptail --backtitle "Proxmox Scripts" --inputbox "Set a Vlan(leave blank for default)" 8 58 --title "VLAN" 3>&1 1>&2 2>&3); then
-    if [ -z $VLAN1 ]; then
+    if [ -z "$VLAN1" ]; then
       VLAN1="Default"
       VLAN=""
     else
@@ -554,7 +558,7 @@ build_container() {
 
 
   TEMP_DIR=$(mktemp -d)
-  pushd $TEMP_DIR >/dev/null
+  pushd "$TEMP_DIR" >/dev/null
   if [ "$var_os" == "alpine" ]; then
     export FUNCTIONS_FILE_PATH="$(curl -s https://raw.githubusercontent.com/Configurations/Proxmox/main/scripts/alpine-install.func)"
   else

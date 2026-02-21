@@ -2,6 +2,12 @@
 # Définir le répertoire à scanner (modifier si nécessaire)
 $repertoire = ".\Installs"
 
+# Vérifier que le répertoire existe
+if (-not (Test-Path -Path $repertoire -PathType Container)) {
+    Write-Host "Erreur : Le répertoire '$repertoire' n'existe pas." -ForegroundColor Red
+    exit 1
+}
+
 # Définir le fichier de sortie
 $fichierSortie = ".\applications.txt"
 

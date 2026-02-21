@@ -6,7 +6,7 @@
 # https://github.com/tteck/Proxmox/raw/main/LICENSE
 
 ## Install docker
-## bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/installs/docker.sh)"
+## bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/Installs/docker.sh)"
 
 # if the script is launch alone without the container creation
 if [[ ! -v FUNCTIONS_FILE_PATH ]]; then
@@ -29,13 +29,18 @@ $STD apt-get install -y mc
 msg_ok "Installed Dependencies"
 
 get_latest_release() {
-  curl -sL https://api.github.com/repos/$1/releases/latest | grep '"tag_name":' | cut -d'"' -f4
+  local version=$(curl -sL https://api.github.com/repos/$1/releases/latest 2>/dev/null | grep '"tag_name":' | cut -d'"' -f4)
+  if [ -z "$version" ]; then
+    msg_error "Failed to retrieve latest version for $1"
+    exit 1
+  fi
+  echo "$version"
 }
 
-DOCKER_LATEST_VERSION=$(get_latest_release "moby/moby")
-PORTAINER_LATEST_VERSION=$(get_latest_release "portainer/portainer")
-PORTAINER_AGENT_LATEST_VERSION=$(get_latest_release "portainer/agent")
-DOCKER_COMPOSE_LATEST_VERSION=$(get_latest_release "docker/compose")
+DOCKER_LATEST_VERSION=$(get_latest_release "moby/moby") || exit 1
+PORTAINER_LATEST_VERSION=$(get_latest_release "portainer/portainer") || exit 1
+PORTAINER_AGENT_LATEST_VERSION=$(get_latest_release "portainer/agent") || exit 1
+DOCKER_COMPOSE_LATEST_VERSION=$(get_latest_release "docker/compose") || exit 1
 
 msg_info "Installing Docker $DOCKER_LATEST_VERSION"
 DOCKER_CONFIG_PATH='/etc/docker/daemon.json'
@@ -44,7 +49,8 @@ echo -e '{\n  "log-driver": "journald"\n}' >/etc/docker/daemon.json
 $STD sh <(curl -sSL https://get.docker.com)
 msg_ok "Installed Docker $DOCKER_LATEST_VERSION"
 
-read -r -p "Would you like to add Portainer? <y/N> " prompt
+echo -n "Would you like to add Portainer? <y/N> "
+read -r prompt
 if [[ ${prompt,,} =~ ^(y|yes)$ ]]; then
   msg_info "Installing Portainer $PORTAINER_LATEST_VERSION"
   docker volume create portainer_data >/dev/null
@@ -58,7 +64,8 @@ if [[ ${prompt,,} =~ ^(y|yes)$ ]]; then
     portainer/portainer-ce:latest
   msg_ok "Installed Portainer $PORTAINER_LATEST_VERSION"
 else
-  read -r -p "Would you like to add the Portainer Agent? <y/N> " prompt
+  echo -n "Would you like to add the Portainer Agent? <y/N> "
+  read -r prompt
   if [[ ${prompt,,} =~ ^(y|yes)$ ]]; then
     msg_info "Installing Portainer agent $PORTAINER_AGENT_LATEST_VERSION"
     $STD docker run -d \
@@ -71,7 +78,8 @@ else
     msg_ok "Installed Portainer Agent $PORTAINER_AGENT_LATEST_VERSION"
   fi
 fi
-read -r -p "Would you like to add Docker Compose? <y/N> " prompt
+echo -n "Would you like to add Docker Compose? <y/N> "
+read -r prompt
 if [[ ${prompt,,} =~ ^(y|yes)$ ]]; then
   msg_info "Installing Docker Compose $DOCKER_COMPOSE_LATEST_VERSION"
   DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}

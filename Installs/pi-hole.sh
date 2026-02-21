@@ -66,7 +66,8 @@ WEBPASSWORD=$(openssl rand -base64 48)
 BLOCKING_ENABLED=true
 EOF
 
-read -r -p "Would you like to add Unbound? <y/N> " prompt
+echo -n "Would you like to add Unbound? <y/N> "
+read -r prompt
 if [[ ${prompt,,} =~ ^(y|yes)$ ]]; then
   msg_info "Installing Unbound"
   $STD apt-get install -y unbound
