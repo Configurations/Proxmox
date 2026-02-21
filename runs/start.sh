@@ -14,6 +14,30 @@ if [ -z "$FUNC_FILE" ]; then
 fi
 source <(echo "$FUNC_FILE")
 
+# --- CLI flags ---
+# --update CTID  : trigger /usr/bin/update inside an existing container from the Proxmox host
+# --dry-run | -n : show what would be created without actually creating anything
+DRY_RUN=0
+export DRY_RUN
+
+if [[ "${1:-}" == "--update" && -n "${2:-}" ]]; then
+  UPDATE_CTID="$2"
+  if ! pct list | awk 'NR>1{print $1}' | grep -qx "$UPDATE_CTID"; then
+    echo "Error: container $UPDATE_CTID not found."
+    exit 1
+  fi
+  echo "Triggering update for container $UPDATE_CTID..."
+  pct exec "$UPDATE_CTID" -- bash -c "/usr/bin/update"
+  echo "Update completed."
+  exit 0
+fi
+
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run|-n) DRY_RUN=1 ;;
+  esac
+done
+
 function header_info {
 clear
 cat <<"EOF"

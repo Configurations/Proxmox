@@ -1,5 +1,9 @@
 echo "initializing build.func..."
 
+# Fetches applications.txt from GitHub and presents an interactive radiolist via whiptail.
+# Requires: BUILD_VERSION env var (falls back to "main"), whiptail, curl.
+# Returns: selected application name (stdout), empty string if user cancels.
+# Side-effects: none.
 function select_application() {
   local -a MENU
   MENUAPPLY=$(curl -s "https://raw.githubusercontent.com/Configurations/Proxmox/${BUILD_VERSION:-main}/applications.txt" 2>/dev/null)
@@ -21,6 +25,12 @@ function select_application() {
   fi
 }
 
+# Derives runtime variables from the APP name set by the caller.
+# Requires: APP (application name, may contain uppercase and spaces).
+# Side-effects:
+#   NSAPP       = lowercase APP with spaces stripped (used as container hostname and script basename)
+#   var_install = same as NSAPP (basename of Installs/<name>.sh to execute)
+#   INTEGER     = regex pattern for integer validation
 variables() {
   NSAPP=$(echo ${APP,,} | tr -d ' ') # This function sets the NSAPP variable by converting the value of the APP variable to lowercase and removing any spaces.
   var_install="${NSAPP}"             # sets the var_install variable by appending "-install" to the value of NSAPP.
@@ -500,6 +510,11 @@ advanced_settings() {
   fi
 }
 
+# Validates the Proxmox environment then shows the settings dialog (default or advanced).
+# Must be called from a Proxmox host (requires pveversion, pvesh).
+# Requires: APP, var_os, var_version, var_disk, var_cpu, var_ram to be set by the caller.
+# Side-effects: sets NEXTID, timezone, and all container config variables (CT_TYPE, CT_ID, HN,
+#   DISK_SIZE, CORE_COUNT, RAM_SIZE, BRG, NET, GATE, DISABLEIP6, MTU, SD, NS, MAC, VLAN, SSH, VERB, PW).
 install_script() {
   pve_check
   shell_check
@@ -524,6 +539,11 @@ install_script() {
   fi
 }
 
+# Entry point that branches between container creation (Proxmox host) and update (inside container).
+# When pveversion is available  → shows "create?" dialog then calls install_script().
+# When pveversion is absent     → shows "update?" dialog then calls update_script() defined by caller.
+# Requires: APP, header_info(), default_settings(), update_script() to be defined by the caller.
+# Side-effects: may exit on user cancellation.
 start() {
   if command -v pveversion >/dev/null 2>&1; then
     if ! (whiptail --backtitle "Proxmox Scripts" --title "${APP} LXC" --yesno "This will create a New ${APP} LXC. Proceed?" 10 58); then
@@ -547,8 +567,32 @@ start() {
 }
 
 # This function collects user settings and integrates all the collected information.
+# When DRY_RUN=1, prints the container configuration and returns without creating anything.
+# Requires: all variables set by install_script() / default_settings() / advanced_settings().
+# Side-effects: creates LXC container, starts it, and runs the Installs/<app>.sh inside it.
 build_container() {
 #  if [ "$VERB" == "yes" ]; then set -x; fi
+
+  # Dry-run: display planned configuration and exit early
+  if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    local CT_TYPE_LABEL
+    CT_TYPE_LABEL=$([ "$CT_TYPE" == "0" ] && echo "Privileged" || echo "Unprivileged")
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "  [DRY RUN] Container would be created with:"
+    echo "  App:      $APP"
+    echo "  OS:       $var_os $var_version"
+    echo "  Type:     $CT_TYPE_LABEL"
+    echo "  CPU:      $CORE_COUNT core(s)"
+    echo "  RAM:      $RAM_SIZE MB"
+    echo "  Disk:     $DISK_SIZE GB"
+    echo "  Network:  $NET"
+    echo "  Bridge:   $BRG"
+    echo "  SSH root: $SSH"
+    echo "  Script:   Installs/$var_install.sh"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    return 0
+  fi
 
   if [ "$CT_TYPE" == "1" ]; then
     FEATURES="mount=nfs;cifs,keyctl=1,nesting=1"
