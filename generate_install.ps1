@@ -16,10 +16,11 @@ $fichierSortie = ".\applications.txt"
 $stringBuilder = New-Object System.Text.StringBuilder
 
 # Récupérer les fichiers *.sh, enlever l'extension, trier et concaténer avec des ":"
-Get-ChildItem -Path $repertoire -Filter "*.sh" | 
+Get-ChildItem -Path $repertoire -Filter "*.sh" |
+    Where-Object { $_.Name -ne "_Template.sh" } |  # Exclure le template développeur
     ForEach-Object { $_.BaseName } |  # Extraire les noms sans l'extension
     Sort-Object |                    # Trier les noms par ordre alphabétique
-    ForEach-Object { 
+    ForEach-Object {
         if ($stringBuilder.Length -gt 0) {
             $stringBuilder.Append(";") | Out-Null
         }

@@ -9,7 +9,7 @@
 
 # if the script is launch alone without the container creation
 if [[ ! -v FUNCTIONS_FILE_PATH ]]; then
-  source <(curl -s https://github.com/Configurations/Proxmox/raw/main/scripts/build.func)
+  source <(curl -s "https://raw.githubusercontent.com/Configurations/Proxmox/${BUILD_VERSION:-main}/scripts/build.func")
 else
   source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 fi
@@ -17,16 +17,18 @@ fi
 color
 verb_ip6
 catch_errors
+
+if command -v apk &>/dev/null; then
+  msg_error "Pi-hole does not support Alpine Linux. Use Debian or Ubuntu."
+  exit 1
+fi
+
 setting_up_container
 network_check
 update_os
 
 msg_info "Installing Dependencies"
-$STD apt-get install -y curl
-$STD apt-get install -y sudo
-$STD apt-get install -y mc
-$STD apt-get install -y ufw
-$STD apt-get install -y ntp
+$STD apt-get install -y curl sudo mc ufw ntp
 msg_ok "Installed Dependencies"
 
 msg_info "Installing Pi-hole"

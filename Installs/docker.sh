@@ -10,7 +10,7 @@
 
 # if the script is launch alone without the container creation
 if [[ ! -v FUNCTIONS_FILE_PATH ]]; then
-  source <(curl -s https://github.com/Configurations/Proxmox/raw/main/scripts/build.func)
+  source <(curl -s "https://raw.githubusercontent.com/Configurations/Proxmox/${BUILD_VERSION:-main}/scripts/build.func")
 else
   source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 fi
@@ -22,10 +22,16 @@ setting_up_container
 network_check
 update_os
 
+if command -v apk &>/dev/null; then
+  install_pkg() { $STD apk add --no-cache "$@"; }
+  cleanup_pkg() { $STD apk cache clean; }
+else
+  install_pkg() { $STD apt-get install -y "$@"; }
+  cleanup_pkg() { $STD apt-get -y autoremove; $STD apt-get -y autoclean; }
+fi
+
 msg_info "Installing Dependencies"
-$STD apt-get install -y curl
-$STD apt-get install -y sudo
-$STD apt-get install -y mc
+install_pkg curl sudo mc
 msg_ok "Installed Dependencies"
 
 get_latest_release() {
@@ -46,7 +52,13 @@ msg_info "Installing Docker $DOCKER_LATEST_VERSION"
 DOCKER_CONFIG_PATH='/etc/docker/daemon.json'
 mkdir -p $(dirname $DOCKER_CONFIG_PATH)
 echo -e '{\n  "log-driver": "journald"\n}' >/etc/docker/daemon.json
-$STD sh <(curl -sSL https://get.docker.com)
+if command -v apk &>/dev/null; then
+  $STD apk add --no-cache docker docker-cli-compose
+  $STD rc-update add docker default
+  $STD service docker start
+else
+  $STD sh <(curl -sSL https://get.docker.com)
+fi
 msg_ok "Installed Docker $DOCKER_LATEST_VERSION"
 
 echo -n "Would you like to add Portainer? <y/N> "
@@ -93,6 +105,5 @@ motd_ssh
 customize
 
 msg_info "Cleaning up"
-$STD apt-get -y autoremove
-$STD apt-get -y autoclean
+cleanup_pkg
 msg_ok "Cleaned"

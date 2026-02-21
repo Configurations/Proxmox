@@ -10,7 +10,7 @@ if [ ! -d "$INSTALLS_DIR" ]; then
   exit 1
 fi
 
-result=$(find "$INSTALLS_DIR" -maxdepth 1 -name "*.sh" -exec basename {} .sh \; | sort | paste -sd ';')
+result=$(find "$INSTALLS_DIR" -maxdepth 1 -name "*.sh" ! -name "_Template.sh" -exec basename {} .sh \; | sort | paste -sd ';')
 
 if [ -z "$result" ]; then
   echo "Erreur : Aucun fichier .sh trouvé dans '$INSTALLS_DIR'." >&2

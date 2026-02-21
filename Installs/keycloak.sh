@@ -8,7 +8,7 @@
 
 # if the script is launch alone without the container creation
 if [[ ! -v FUNCTIONS_FILE_PATH ]]; then
-  source <(curl -s https://github.com/Configurations/Proxmox/raw/main/scripts/build.func)
+  source <(curl -s "https://raw.githubusercontent.com/Configurations/Proxmox/${BUILD_VERSION:-main}/scripts/build.func")
 else
   source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 fi
@@ -20,12 +20,18 @@ setting_up_container
 network_check
 update_os
 
+if command -v apk &>/dev/null; then
+  install_pkg() { $STD apk add --no-cache "$@"; }
+  cleanup_pkg() { $STD apk cache clean; }
+  JAVA_PKG="openjdk17-jre-headless"
+else
+  install_pkg() { $STD apt-get install -y "$@"; }
+  cleanup_pkg() { $STD apt-get -y autoremove; $STD apt-get -y autoclean; }
+  JAVA_PKG="ca-certificates-java openjdk-17-jre-headless"
+fi
+
 msg_info "Installing Dependencies (Patience)"
-$STD apt-get install -y curl
-$STD apt-get install -y sudo
-$STD apt-get install -y mc
-$STD apt-get install -y ca-certificates-java
-$STD apt-get install -y openjdk-17-jre-headless
+install_pkg curl sudo mc $JAVA_PKG
 msg_ok "Installed Dependencies"
 
 RELEASE=$(curl -s https://api.github.com/repos/keycloak/keycloak/releases/latest | grep "tag_name" | awk '{print substr($2, 2, length($2)-3) }')
@@ -71,6 +77,5 @@ motd_ssh
 customize
 
 msg_info "Cleaning up"
-$STD apt-get -y autoremove
-$STD apt-get -y autoclean
+cleanup_pkg
 msg_ok "Cleaned"
