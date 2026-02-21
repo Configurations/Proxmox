@@ -52,7 +52,7 @@ jobs:
           exit "$fail"
 
   # ─────────────────────────────────────────────
-  # Job 3 : applications.txt sync + structure check
+  # Job 3 : applications.txt sync check
   # ─────────────────────────────────────────────
   sync:
     name: applications.txt sync check
@@ -62,3 +62,15 @@ jobs:
 
       - name: Check applications.txt in sync with Installs/
         run: bash scripts/check-sync.sh
+
+  # ─────────────────────────────────────────────
+  # Job 4 : Install script structure validation
+  # ─────────────────────────────────────────────
+  structure:
+    name: Install script structure check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Installs/*.sh follow the required template
+        run: bash scripts/check-structure.sh

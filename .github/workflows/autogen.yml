@@ -1,0 +1,39 @@
+name: Auto-generate applications.txt
+
+# Triggered only when Installs/ scripts are pushed to main.
+# Regenerates applications.txt and commits it if the content changed.
+# Uses [skip ci] in the commit message to avoid triggering CI again.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Installs/*.sh'
+
+jobs:
+  regenerate:
+    name: Regenerate applications.txt
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Use the default GITHUB_TOKEN with write permission
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Regenerate applications.txt
+        run: bash generate_install.sh
+
+      - name: Commit if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add applications.txt
+          if git diff --staged --quiet; then
+            echo "applications.txt is already up to date, nothing to commit."
+          else
+            git commit -m "auto: regenerate applications.txt [skip ci]"
+            git push
+            echo "applications.txt updated and pushed."
+          fi
