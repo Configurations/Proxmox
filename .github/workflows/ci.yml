@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Job 1 : Syntax validation (bash -n)
+  # ─────────────────────────────────────────────
+  syntax:
+    name: Bash syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run bash -n on all .sh files
+        run: |
+          fail=0
+          while IFS= read -r -d '' file; do
+            if ! bash -n "$file" 2>&1; then
+              echo "FAIL: $file"
+              fail=1
+            else
+              echo "OK:   $file"
+            fi
+          done < <(find . -name "*.sh" -not -path "./.git/*" -print0)
+          exit "$fail"
+
+  # ─────────────────────────────────────────────
+  # Job 2 : ShellCheck linting
+  # ─────────────────────────────────────────────
+  shellcheck:
+    name: ShellCheck linting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: Run shellcheck
+        run: |
+          fail=0
+          while IFS= read -r -d '' file; do
+            if ! shellcheck --severity=warning "$file" 2>&1; then
+              fail=1
+            fi
+          done < <(find . -name "*.sh" -not -path "./.git/*" -print0)
+          exit "$fail"
+
+  # ─────────────────────────────────────────────
+  # Job 3 : applications.txt sync + structure check
+  # ─────────────────────────────────────────────
+  sync:
+    name: applications.txt sync check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check applications.txt in sync with Installs/
+        run: bash scripts/check-sync.sh

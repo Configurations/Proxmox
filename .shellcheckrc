@@ -1,0 +1,18 @@
+# ShellCheck configuration for this project.
+# See: https://www.shellcheck.net/wiki/
+
+# SC1090 / SC1091 – Can't follow dynamic source paths.
+# All scripts source build.func / install.func at runtime via curl or
+# process substitution. Shellcheck can't resolve these statically.
+disable=SC1090
+disable=SC1091
+
+# SC2034 – Variable appears unused.
+# Color variables (YW, BL, RD, GN, …) set in color() are used via string
+# interpolation in echo -e calls across sourced scripts.
+disable=SC2034
+
+# SC2154 – Variable referenced but not assigned in this file.
+# Runtime variables ($STD, $APPLICATION, $CM, $BFR, …) are injected by
+# build.func / install.func sourced at execution time.
+disable=SC2154
