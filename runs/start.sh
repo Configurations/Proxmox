@@ -5,7 +5,9 @@
 #!/usr/bin/env bash
 set -xe
 trap 'echo "Erreur dans le script"; exit 1' ERR
-FUNC_FILE=$(curl -s https://raw.githubusercontent.com/Configurations/Proxmox/main/scripts/build.func 2>/dev/null)
+BUILD_VERSION="main"
+export BUILD_VERSION
+FUNC_FILE=$(curl -s "https://raw.githubusercontent.com/Configurations/Proxmox/${BUILD_VERSION}/scripts/build.func" 2>/dev/null)
 if [ -z "$FUNC_FILE" ]; then
   echo "Erreur : Impossible de charger les fonctions"
   exit 1

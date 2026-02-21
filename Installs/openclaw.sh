@@ -15,7 +15,7 @@
 
 # if the script is launched alone without the container creation
 if [[ ! -v FUNCTIONS_FILE_PATH ]]; then
-  source <(curl -s https://raw.githubusercontent.com/Configurations/Proxmox/main/scripts/build.func)
+  source <(curl -s "https://raw.githubusercontent.com/Configurations/Proxmox/${BUILD_VERSION:-main}/scripts/build.func")
 else
   source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 fi

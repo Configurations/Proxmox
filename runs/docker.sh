@@ -5,7 +5,9 @@
 #!/usr/bin/env bash
 set -xe
 trap 'echo "Erreur dans le script"; exit 1' ERR
-source <(curl -s https://raw.githubusercontent.com/Configurations/Proxmox/main/scripts/build.func)
+BUILD_VERSION="main"
+export BUILD_VERSION
+source <(curl -s "https://raw.githubusercontent.com/Configurations/Proxmox/${BUILD_VERSION}/scripts/build.func")
 
 function header_info {
 clear

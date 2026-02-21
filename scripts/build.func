@@ -2,7 +2,7 @@ echo "initializing build.func..."
 
 function select_application() {
   local -a MENU
-  MENUAPPLY=$(curl -s https://raw.githubusercontent.com/Configurations/Proxmox/main/applications.txt 2>/dev/null)
+  MENUAPPLY=$(curl -s "https://raw.githubusercontent.com/Configurations/Proxmox/${BUILD_VERSION:-main}/applications.txt" 2>/dev/null)
   if [ -z "$MENUAPPLY" ]; then
     msg_error "Failed to fetch applications list"
     return 1
