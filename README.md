@@ -1,374 +1,467 @@
-# Proxmox LXC Container Installation Scripts
+# Proxmox LXC Installation Scripts
 
-This repository contains automated installation and deployment scripts for various applications in Proxmox Virtual Environment (PVE) LXC containers. It provides a streamlined way to create and configure containerized applications with minimal manual intervention.
+Automated installation and deployment scripts for containerized applications in Proxmox Virtual Environment (PVE). Create and configure LXC containers with a guided wizard — no manual intervention required.
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [Overview](#overview)
 - [Supported Applications](#supported-applications)
 - [Prerequisites](#prerequisites)
 - [Quick Start](#quick-start)
-- [Installation Methods](#installation-methods)
-- [Features](#features)
+- [CLI Flags](#cli-flags)
 - [Directory Structure](#directory-structure)
+- [Adding a New Application](#adding-a-new-application)
 - [Advanced Configuration](#advanced-configuration)
-- [Troubleshooting](#troubleshooting)
+- [Application Notes](#application-notes)
+- [CI/CD](#cicd)
 - [Contributing](#contributing)
 - [License](#license)
 
-## 🎯 Overview
+---
 
-This project automates the deployment of containerized applications in Proxmox Virtual Environment. Instead of manually creating LXC containers and installing software, you can use these scripts to:
+## Overview
 
-- Create new LXC containers with your chosen OS (Debian, Ubuntu, Alpine)
-- Automatically install and configure applications
-- Apply security best practices
-- Customize resource allocation (CPU, RAM, disk)
-- Configure networking (static IP, DHCP, DNS, VLAN)
+This project eliminates the manual steps of creating LXC containers and installing applications in Proxmox. The wizard handles:
 
-## 📦 Supported Applications
+- Container creation (OS, CPU, RAM, disk)
+- Network configuration (DHCP, static IP, VLAN, MTU, DNS)
+- Application installation and systemd service setup
+- Security hardening (credentials generation, SSH control)
+- Post-install cleanup
 
-The following applications can be automatically installed:
+Supported OS targets: **Debian 11/12**, **Ubuntu 20.04/22.04/24.04**, **Alpine Linux**.
 
-- **Docker** - Container runtime with optional Portainer management UI
-- **Pi-hole** - DNS sinkhole and DHCP server with Unbound resolver support
-- **Keycloak** - Identity and access management server
-- **OpenClaw** - Web scraping and intelligent automation framework
-- **Empty** - Minimal base container for custom installations
+---
 
-New applications can be easily added by creating new installation scripts in the `Installs/` directory.
+## Supported Applications
 
-## ⚙️ Prerequisites
+| Application | OS | Type | CPU | RAM | Disk | Port(s) |
+|---|---|---|---|---|---|---|
+| **Docker** + Portainer | Debian 12 | Unprivileged | 2 | 2 GB | 4 GB | 9443 (Portainer), 9001 (Agent) |
+| **Gitea** | Debian 12 | Unprivileged | 2 | 1 GB | 8 GB | 3000 |
+| **Keycloak** | Debian 12 | Unprivileged | 2 | 2 GB | 6 GB | 8080 |
+| **Nginx Proxy Manager** | Debian 12 | **Privileged** | 2 | 512 MB | 4 GB | 80, 81 (admin), 443 |
+| **OpenClaw** | Ubuntu 24.04 | **Privileged** | 2 | 4 GB | 10 GB | 18789 |
+| **Pi-hole** | Debian 12 | Unprivileged | 1 | 512 MB | 4 GB | 80, 53 (DNS) |
+| **Uptime Kuma** | Debian 12 | Unprivileged | 1 | 512 MB | 4 GB | 3001 |
+| **Vaultwarden** | Debian 12 | **Privileged** | 1 | 512 MB | 4 GB | 8080 |
+| **Empty** | Debian 12 | Unprivileged | 2 | 2 GB | 4 GB | — |
 
-Before running these scripts, ensure you have:
+> Privileged containers are required for Docker-based apps (Vaultwarden, Nginx Proxy Manager) and OpenClaw.
 
-1. **Proxmox Virtual Environment** (version 8.1 or later)
-2. **SSH access** to the Proxmox server or direct shell access
-3. **Root privileges** on the Proxmox host
-4. **Available storage** for templates and containers
-5. **Network connectivity** to download templates and packages
+---
 
-### Minimum Hardware Requirements
+## Prerequisites
 
-- **CPU**: 2 cores minimum (4+ recommended)
-- **RAM**: 4GB minimum (8GB+ recommended)
-- **Storage**: 20GB minimum for templates and containers
+- **Proxmox VE 8.1 or later**
+- **Root access** on the Proxmox host (direct shell or SSH)
+- **Network connectivity** to download OS templates and packages
+- **amd64 architecture** (ARM not supported in this repo)
 
-## 🚀 Quick Start
+### Minimum host resources
 
-### Option 1: Direct Installation (Recommended)
+| Resource | Minimum | Recommended |
+|---|---|---|
+| CPU | 2 cores | 4+ cores |
+| RAM | 4 GB | 8+ GB |
+| Storage | 20 GB | 50+ GB |
 
-Run the main installation script directly from the Proxmox shell or SSH terminal:
+---
+
+## Quick Start
+
+Run from the Proxmox shell (not SSH — see note below):
 
 ```bash
 bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/runs/start.sh)"
 ```
 
-### Option 2: Local File Execution
+The wizard will:
+1. Let you select an application from the list
+2. Offer default settings or advanced configuration
+3. Create the LXC container and run the install script inside it
 
-If you prefer to download the scripts first:
+> **SSH note**: The script can be run over SSH but the Proxmox shell is recommended to avoid terminal variable issues.
 
-```bash
-# Download the main installer script
-wget https://github.com/Configurations/Proxmox/raw/main/runs/start.sh
+### Direct install for a specific app
 
-# Make it executable
-chmod +x start.sh
-
-# Run the installation
-./start.sh
-```
-
-### Option 3: Manual Application Selection
-
-For more control, you can manually select applications:
+Each application also has a standalone runner:
 
 ```bash
-# Generate the applications list
-pwsh ./generate_install.ps1
-
-# Then run the installer
-bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/runs/start.sh)"
+bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/runs/docker.sh)"
+bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/runs/gitea.sh)"
+bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/runs/keycloak.sh)"
+bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/runs/nginx-proxy-manager.sh)"
+bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/runs/openclaw.sh)"
+bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/runs/pi-hole.sh)"
+bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/runs/uptime-kuma.sh)"
+bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/runs/vaultwarden.sh)"
 ```
 
-## 📖 Installation Methods
+### Updating an existing container
 
-### Default Settings Installation
+From the **Proxmox host**, trigger an update inside a running container by ID:
 
-The wizard will use default settings:
-- **Distribution**: Debian 12 (Bookworm)
-- **Container Type**: Unprivileged
-- **Disk Size**: 4GB
-- **CPU Cores**: 2
-- **RAM**: 2048MB (2GB)
-- **Network**: DHCP
-- **Root Password**: Automatic login
+```bash
+wget -qO start.sh https://github.com/Configurations/Proxmox/raw/main/runs/start.sh
+bash start.sh --update 102
+```
 
-### Advanced Settings Installation
+Or from **inside the container** directly:
 
-When prompted, select "Advanced" to customize:
-- Choose OS distribution and version (Debian 11/12, Ubuntu 20.04/22.04/24.04, Alpine)
-- Set root password or enable automatic login
-- Assign container ID manually
-- Configure hostname
-- Allocate CPU cores and RAM
-- Set disk size
-- Configure static IP address or gateway
-- Enable IPv6 or DNS customization
-- Add VLAN tags and MAC address customization
-- Enable verbose mode for debugging
+```bash
+/usr/bin/update
+```
 
-## ✨ Features
+---
 
-### Automated Setup
-- Interactive wizard with sensible defaults
-- Whiptail-based GUI for configuration
-- Progress indicators and real-time feedback
-- Automatic template download and caching
+## CLI Flags
 
-### Security
-- Randomly generated admin passwords stored securely
-- Validation of all user inputs
-- Root privilege checks
-- Architecture compatibility verification
+`runs/start.sh` accepts the following flags:
 
-### Error Handling
-- Comprehensive error messages
-- Graceful failure recovery
-- Detailed logging for troubleshooting
-- Automatic cleanup on interruption
+| Flag | Description |
+|---|---|
+| `--dry-run` / `-n` | Show the planned container configuration without creating anything |
+| `--update <CTID>` | Trigger the update routine inside an existing container (Proxmox host only) |
 
-### Flexibility
-- Support for multiple Linux distributions
-- Privileged and unprivileged container modes
-- Hardware device passthrough support (VAAPI)
-- Custom resource allocation
+### Dry-run example
 
-## 📁 Directory Structure
+```bash
+wget -qO start.sh https://github.com/Configurations/Proxmox/raw/main/runs/start.sh
+bash start.sh --dry-run
+```
+
+Output:
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  [DRY RUN] Container would be created with:
+  App:      gitea
+  OS:       debian 12
+  Type:     Unprivileged
+  CPU:      2 core(s)
+  RAM:      1024 MB
+  Disk:     8 GB
+  Network:  dhcp
+  Bridge:   vmbr0
+  SSH root: no
+  Script:   Installs/gitea.sh
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+---
+
+## Directory Structure
 
 ```
 Proxmox/
-├── README.md                    # This file
-├── LICENSE                      # MIT License
-├── applications.txt             # List of available applications
-├── generate_install.ps1         # PowerShell script to generate app list
+├── .github/
+│   └── workflows/
+│       ├── ci.yml              # 4-job CI pipeline (syntax, shellcheck, sync, structure)
+│       └── autogen.yml         # Auto-regenerate applications.txt on Installs/ changes
 ├── Installs/
 │   ├── _Empty.sh               # Minimal base container
-│   ├── docker.sh               # Docker + Portainer installation
-│   ├── pi-hole.sh              # Pi-hole + Unbound installation
-│   ├── keycloak.sh             # Keycloak installation
-│   └── openclaw.sh             # OpenClaw web scraping framework
+│   ├── _Template.sh            # Reference template for new scripts (excluded from menu)
+│   ├── docker.sh               # Docker + Portainer + Compose
+│   ├── gitea.sh                # Gitea Git hosting
+│   ├── keycloak.sh             # Keycloak IAM
+│   ├── nginx-proxy-manager.sh  # Nginx Proxy Manager (Docker-based)
+│   ├── openclaw.sh             # OpenClaw automation framework
+│   ├── pi-hole.sh              # Pi-hole + optional Unbound
+│   ├── uptime-kuma.sh          # Uptime Kuma monitoring
+│   └── vaultwarden.sh          # Vaultwarden password manager (Docker-based)
 ├── runs/
-│   ├── start.sh                # Main installation wizard
-│   └── docker.sh               # Docker composition script
-└── scripts/
-    ├── build.func              # Core build functions library
-    ├── create_lxc.sh           # LXC container creation
-    ├── alpine-install.func     # Alpine Linux functions
-    ├── install.func            # Debian/Ubuntu functions
-    └── post-pbs-install.sh     # Post-installation tasks
+│   ├── start.sh                # Interactive wizard (all apps, supports --dry-run / --update)
+│   ├── docker.sh               # Docker runner + updater
+│   ├── gitea.sh                # Gitea runner + updater
+│   ├── keycloak.sh             # Keycloak runner + updater
+│   ├── nginx-proxy-manager.sh  # NPM runner + updater
+│   ├── openclaw.sh             # OpenClaw runner + updater
+│   ├── pi-hole.sh              # Pi-hole runner + updater
+│   ├── uptime-kuma.sh          # Uptime Kuma runner + updater
+│   └── vaultwarden.sh          # Vaultwarden runner + updater
+├── scripts/
+│   ├── build.func              # Main function library (sourced by all runs/ scripts)
+│   ├── install.func            # Debian/Ubuntu install-time functions
+│   ├── alpine-install.func     # Alpine install-time functions
+│   ├── create_lxc.sh           # LXC container creation
+│   ├── check-sync.sh           # CI: applications.txt vs Installs/ sync
+│   ├── check-structure.sh      # CI: required sections in Installs/ scripts
+│   └── post-pbs-install.sh     # Post-installation tasks
+├── applications.txt            # Semicolon-separated list of available apps (auto-generated)
+├── generate_install.sh         # Regenerate applications.txt — Linux/macOS
+├── generate_install.ps1        # Regenerate applications.txt — Windows (PowerShell)
+└── .shellcheckrc               # ShellCheck project-wide configuration
 ```
 
-## 🔧 Advanced Configuration
+---
 
-### Creating Custom Application Installers
+## Adding a New Application
 
-To add a new application:
+### 1. Create the install script
 
-1. Create `Installs/myapp.sh`:
+Copy `Installs/_Template.sh` to `Installs/myapp.sh`. The template documents all required sections and available runtime variables.
+
+**Required sections** (enforced by CI's structure check):
 
 ```bash
-#!/usr/bin/env bash
-
-# Source the build functions
+# Standalone execution guard
 if [[ ! -v FUNCTIONS_FILE_PATH ]]; then
-  source <(curl -s https://github.com/Configurations/Proxmox/raw/main/scripts/build.func)
+  source <(curl -s "https://raw.githubusercontent.com/Configurations/Proxmox/${BUILD_VERSION:-main}/scripts/build.func")
 else
   source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 fi
 
-# Initialize environment
-color
-verb_ip6
-catch_errors
-setting_up_container
-network_check
-update_os
+color; verb_ip6; catch_errors          # initialisation
+setting_up_container; network_check    # container setup
+update_os                              # OS packages update
 
-# Your installation commands here
-msg_info "Installing MyApp"
-apt-get update
-apt-get install -y myapp
-msg_ok "MyApp installed"
+# ... your install logic ...
 
-# Cleanup
-msg_info "Cleaning up"
-apt-get -y autoremove
-apt-get -y autoclean
-msg_ok "Cleaned"
+motd_ssh; customize                    # finalisation + cleanup
 ```
 
-2. The script will be automatically available in the application selection menu.
+**Available runtime variables:**
 
-### Updating Applications List
+| Variable | Description |
+|---|---|
+| `$APPLICATION` | Display name (e.g. `"Gitea"`) |
+| `$app` | Lowercase name (e.g. `"gitea"`) |
+| `$STD` | `""` (verbose) or `"silent"` (quiet) |
+| `$PASSWORD` | Root password (empty = auto-login) |
+| `$SSH_ROOT` | `"yes"` or `"no"` |
+| `$DISABLEIPV6` | `"yes"` or `"no"` |
+| `$VERBOSE` | `"yes"` or `"no"` |
 
-After adding new installation scripts, regenerate the applications list:
+**Alpine support pattern** (if applicable):
 
-**PowerShell (Windows/WSL):**
-```powershell
+```bash
+if command -v apk &>/dev/null; then
+  install_pkg() { $STD apk add --no-cache "$@"; }
+  cleanup_pkg() { $STD apk cache clean; }
+else
+  install_pkg() { $STD apt-get install -y "$@"; }
+  cleanup_pkg() { $STD apt-get -y autoremove; $STD apt-get -y autoclean; }
+fi
+```
+
+If Alpine is not supported:
+
+```bash
+if command -v apk &>/dev/null; then
+  msg_error "MyApp does not support Alpine Linux. Use Debian or Ubuntu."
+  exit 1
+fi
+```
+
+### 2. Create the runner script
+
+Copy an existing `runs/*.sh` (e.g. `runs/gitea.sh`) to `runs/myapp.sh`. Update:
+
+- `APP="myapp"` — must match the `Installs/` filename
+- `var_disk`, `var_cpu`, `var_ram`, `var_os`, `var_version` — default resources
+- `CT_TYPE` in `default_settings()` — `"0"` privileged or `"1"` unprivileged
+- `update_script()` — app-specific update logic (binary download, `docker compose pull`, etc.)
+
+### 3. Regenerate `applications.txt`
+
+```bash
+# Linux / macOS
+bash generate_install.sh
+
+# Windows (PowerShell)
 .\generate_install.ps1
 ```
 
-**Bash/Linux:**
-```bash
-ls -1 Installs/*.sh | sed 's|Installs/||g' | sed 's|.sh||g' | tr '\n' ';' > applications.txt
-```
+`applications.txt` is also auto-regenerated by CI whenever `Installs/*.sh` changes on `main`.
 
-### Environment Variables
-
-When creating containers, these variables are available in installation scripts:
-
-- `$APPLICATION` - Application name
-- `$app` - Lowercase application name
-- `$CTID` - Container ID
-- `$CTTYPE` - Container type (0=privileged, 1=unprivileged)
-- `$PCT_OSTYPE` - OS type (debian, ubuntu, alpine)
-- `$PCT_OSVERSION` - OS version
-- `$PASSWORD` - Root password (if set)
-- `$SSH_ROOT` - Enable root SSH access (yes/no)
-
-## 🐛 Troubleshooting
-
-### Issue: "Unable to detect a valid Container Storage location"
-
-**Solution**: Ensure you have storage configured in Proxmox for container templates and container storage.
+### 4. Validate locally
 
 ```bash
-pvesm status -content rootdir   # Check container storage
-pvesm status -content vztmpl    # Check template storage
+bash scripts/check-sync.sh       # applications.txt in sync, runs/ scripts exist
+bash scripts/check-structure.sh  # all required sections present
 ```
 
-### Issue: "This version of Proxmox Virtual Environment is not supported"
+---
 
-**Solution**: Update Proxmox to version 8.1 or later:
+## Advanced Configuration
 
+When the wizard prompts, choose **Advanced** to configure:
+
+| Setting | Options |
+|---|---|
+| Distribution | Debian 11/12, Ubuntu 20.04/22.04/24.04, Alpine |
+| Container type | Privileged / Unprivileged |
+| Root password | Custom or automatic login |
+| Container ID | Auto-assigned or manual |
+| Hostname | Derived from app name or custom |
+| CPU cores | Custom count |
+| RAM | Custom (MiB) |
+| Disk | Custom (GB) |
+| Network | DHCP or static CIDR + gateway |
+| Bridge | Default `vmbr0` or custom |
+| IPv6 | Enable / Disable |
+| MTU | Custom or default |
+| DNS | Custom search domain and server |
+| VLAN | Tag or none |
+| MAC address | Auto or custom |
+| SSH root access | Yes / No (requires password) |
+| Verbose mode | Yes / No |
+| APT-Cacher | IP for local package caching |
+
+---
+
+## Application Notes
+
+### Docker
+
+After installation, the wizard prompts to install Portainer and/or Docker Compose.
+
+| Component | URL |
+|---|---|
+| Portainer UI | `https://<ip>:9443` |
+| Portainer Agent | `<ip>:9001` |
+
+### Gitea
+
+Complete initial configuration at `http://<ip>:3000` on first access (database, admin account).
+
+### Keycloak
+
+Admin credentials are generated once and displayed at install time. **Save them immediately.**
+
+```
+Username: temp-admin
+Password: <randomly generated>
+```
+
+To reset credentials:
+```bash
+pct exec <CTID> -- systemctl stop keycloak.service
+pct exec <CTID> -- /opt/keycloak/bin/kc.sh bootstrap-admin user \
+  --bootstrap-admin-username admin --bootstrap-admin-password newpassword
+pct exec <CTID> -- systemctl start keycloak.service
+```
+
+### Nginx Proxy Manager
+
+| URL | Description |
+|---|---|
+| `http://<ip>:81` | Admin panel |
+| `http://<ip>:80` | HTTP proxy |
+| `https://<ip>:443` | HTTPS proxy |
+
+Default login: `admin@example.com` / `changeme` — change on first login.
+Requires a **privileged** container (Docker inside LXC).
+
+### OpenClaw
+
+After installation, run the onboarding wizard once to configure API keys and channels:
+
+```bash
+openclaw onboard --install-daemon
+systemctl start openclaw-gateway
+```
+
+Dashboard: `http://<ip>:18789`
+
+### Pi-hole
+
+Web interface: `http://<ip>/admin`. Admin password shown at install time.
+Optional Unbound recursive resolver is configured on port 5335.
+
+> Pi-hole only supports Debian/Ubuntu. Alpine is blocked at install time.
+
+### Uptime Kuma
+
+Dashboard: `http://<ip>:3001`. Create your admin account on first access.
+
+### Vaultwarden
+
+| URL | Description |
+|---|---|
+| `http://<ip>:8080` | Web vault |
+| `http://<ip>:8080/admin` | Admin panel |
+
+Bitwarden clients require HTTPS — use Nginx Proxy Manager as a reverse proxy.
+Requires a **privileged** container (Docker inside LXC).
+
+---
+
+## CI/CD
+
+### CI pipeline (`.github/workflows/ci.yml`)
+
+Runs on every push and pull request to `main`.
+
+| Job | Tool | Checks |
+|---|---|---|
+| `syntax` | `bash -n` | Parse errors in all `.sh` files |
+| `shellcheck` | ShellCheck `--severity=warning` | Shell anti-patterns (see `.shellcheckrc`) |
+| `sync` | `scripts/check-sync.sh` | `applications.txt` matches `Installs/`, every app has a `runs/` script |
+| `structure` | `scripts/check-structure.sh` | Every `Installs/*.sh` contains the 8 required template sections |
+
+Run the checks locally:
+
+```bash
+bash scripts/check-sync.sh
+bash scripts/check-structure.sh
+```
+
+### Auto-generation (`.github/workflows/autogen.yml`)
+
+Triggers when `Installs/*.sh` files change on `main`. Regenerates and commits `applications.txt` if the content changed. Uses `[skip ci]` to avoid re-triggering CI.
+
+---
+
+## Troubleshooting
+
+**"This version of Proxmox Virtual Environment is not supported"**
 ```bash
 apt update && apt dist-upgrade
 ```
 
-### Issue: Script fails with "Please run this script as root"
-
-**Solution**: Execute the script with root privileges:
-
+**"Please run this script as root"**
 ```bash
 sudo bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/runs/start.sh)"
 ```
 
-### Issue: Container creation fails with "Not enough resources"
-
-**Solution**: Check available storage and reduce container size:
-
+**"Unable to detect a valid Container Storage location"**
 ```bash
-pvesm status                    # Check available storage
-free -h                         # Check available RAM
+pvesm status -content rootdir
+pvesm status -content vztmpl
 ```
 
-### Issue: Network connectivity problems in container
-
-**Solution**: Verify bridge configuration and container network settings:
-
+**Container has no network after creation**
 ```bash
-# On Proxmox host
-ip addr show vmbr0              # Check bridge interface
-
-# Inside container
-ip addr show                    # Check IP configuration
-ping -c 1 8.8.8.8             # Test connectivity
+ip addr show vmbr0                  # Check bridge on host
+pct exec <CTID> -- ip addr          # Check IP inside container
+pct exec <CTID> -- ping 1.1.1.1     # Test connectivity
 ```
 
-## 📝 Keycloak Default Credentials
-
-After Keycloak installation, the admin password is displayed once in the console:
-
-```
-Keycloak Admin Password: <random-password>
-```
-
-**⚠️ Important**: Save this password immediately. It is not stored and cannot be retrieved later. If lost, you must reinstall Keycloak.
-
-To reset the admin password after installation:
-
+**"Not enough resources"**
 ```bash
-pct exec <container-id> -- systemctl stop keycloak.service
-pct exec <container-id> -- /opt/keycloak/bin/kc.sh bootstrap-admin user \
-  --bootstrap-admin-username admin --bootstrap-admin-password newpassword
-pct exec <container-id> -- systemctl start keycloak.service
+pvesm status    # Check available storage
+free -h         # Check available RAM
 ```
-
-## 🔗 Docker & Portainer Access
-
-After Docker installation:
-
-- **Portainer UI**: https://`<container-ip>`:9443
-- **Docker**: Access via `docker` command inside container
-- **Portainer Agent**: Port 9001 (if installed during setup)
-
-## �️ OpenClaw Usage
-
-After OpenClaw installation, you can access and use the framework:
-
-```bash
-# SSH into the container
-pct exec <container-id> -- /bin/bash
-
-# Run OpenClaw commands
-openclaw --help          # View available commands
-openclaw --version       # Check installed version
-
-# Create and run scraping tasks
-cd /opt/openclaw/state
-openclaw run <task-name> # Execute automation tasks
-```
-
-**Features:**
-- Web scraping and HTML parsing
-- Intelligent automation framework
-- Headless browser automation with Playwright/Chromium
-- Node.js 22 runtime included
-- Full environment variables support
-
-## �🛡️ Security Considerations
-
-1. **Change default passwords** immediately after installation
-2. **Configure firewalls** to restrict container access
-3. **Keep Proxmox updated** with latest security patches
-4. **Use SSH keys** instead of password authentication when possible
-5. **Regular backups** of critical containers
-6. **Monitor container logs** for suspicious activity
-
-## 📚 Additional Resources
-
-- [Proxmox VE Documentation](https://pve.proxmox.com/wiki/Main_Page)
-- [Docker Documentation](https://docs.docker.com/)
-- [Pi-hole Documentation](https://docs.pi-hole.net/)
-- [Keycloak Documentation](https://www.keycloak.org/documentation)
-
-## 🤝 Contributing
-
-Contributions are welcome! To add new applications or improve existing scripts:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/new-app`)
-3. Add your installation script in `Installs/`
-4. Test thoroughly in a Proxmox environment
-5. Submit a pull request with detailed description
-
-## 📄 License
-
-This project is released under the MIT License. See [LICENSE](LICENSE) file for details.
 
 ---
 
-**Last Updated**: February 2026
+## Contributing
 
-For issues, questions, or feature requests, please open an issue on the GitHub repository.
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/myapp`
+3. Add `Installs/myapp.sh` following `Installs/_Template.sh`
+4. Add `runs/myapp.sh` following an existing runner
+5. Run `bash generate_install.sh` to update `applications.txt`
+6. Validate: `bash scripts/check-sync.sh && bash scripts/check-structure.sh`
+7. Open a pull request — CI validates automatically on push
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+---
+
+*Based on original work by [tteck](https://github.com/tteck/Proxmox). Extended and maintained by [black beard](https://github.com/Configurations/Proxmox).*
