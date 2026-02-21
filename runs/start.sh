@@ -30,7 +30,7 @@ function default_settings() {
   CT_TYPE="1"
   PW=""
   CT_ID=$NEXTID
-  if [$HN = "empty"]; then
+  if [ $HN = "empty" ]; then
     HN="NewHost"
   else
     HN=$NSAPP
