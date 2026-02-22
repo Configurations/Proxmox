@@ -49,7 +49,7 @@ $STD apt-get install -y \
 msg_ok "Installed Playwright/Chromium Dependencies"
 
 msg_info "Installing Node.js 22"
-$STD curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+$STD bash -c "curl -fsSL https://deb.nodesource.com/setup_22.x | bash -"
 $STD apt-get install -y nodejs
 msg_ok "Installed Node.js $(node --version)"
 
