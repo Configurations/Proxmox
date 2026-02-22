@@ -37,10 +37,14 @@ $STD apt-get install -y build-essential
 msg_ok "Installed Dependencies"
 
 msg_info "Installing Playwright/Chromium Dependencies"
+ALSA_PKG="libasound2"
+if apt-cache show libasound2t64 &>/dev/null; then
+  ALSA_PKG="libasound2t64"
+fi
 $STD apt-get install -y \
   libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
   libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
-  libgbm1 libasound2 libpango-1.0-0 libcairo2 libxshmfence1 \
+  libgbm1 "$ALSA_PKG" libpango-1.0-0 libcairo2 libxshmfence1 \
   fonts-liberation fonts-noto-color-emoji xvfb
 msg_ok "Installed Playwright/Chromium Dependencies"
 
