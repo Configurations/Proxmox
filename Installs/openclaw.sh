@@ -34,6 +34,7 @@ $STD apt-get install -y mc
 $STD apt-get install -y ca-certificates
 $STD apt-get install -y gnupg
 $STD apt-get install -y build-essential
+$STD apt-get install -y git
 msg_ok "Installed Dependencies"
 
 msg_info "Installing Playwright/Chromium Dependencies"
