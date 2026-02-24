@@ -1,1 +1,1 @@
-_Empty;docker;gitea;keycloak;nginx-proxy-manager;openclaw;pi-hole;uptime-kuma;vaultwarden
+_Empty;docker;gitea;keycloak;nginx-proxy-manager;openclaw;pi-hole;uptime-kuma;vaultwarden;watchtower
