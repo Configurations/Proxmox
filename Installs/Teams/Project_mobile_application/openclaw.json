@@ -1,0 +1,118 @@
+{
+  "model": "claude-opus-4-6",
+
+  "agents": {
+    "list": [
+      {
+        "id": "orchestrator",
+        "name": "Orchestrator",
+        "default": true,
+        "workspace": "~/.openclaw/workspace-orchestrator",
+        "systemPromptFile": "~/.openclaw/prompts/orchestrator.md",
+        "browser": { "enabled": false }
+      },
+      {
+        "id": "strategist",
+        "name": "Strategist",
+        "workspace": "~/.openclaw/workspace-strategist",
+        "systemPromptFile": "~/.openclaw/prompts/strategist.md",
+        "browser": { "enabled": true }
+      },
+      {
+        "id": "ux-researcher",
+        "name": "UX Researcher",
+        "workspace": "~/.openclaw/workspace-ux",
+        "systemPromptFile": "~/.openclaw/prompts/ux-researcher.md",
+        "browser": { "enabled": true }
+      },
+      {
+        "id": "product",
+        "name": "Product Manager",
+        "workspace": "~/.openclaw/workspace-product",
+        "systemPromptFile": "~/.openclaw/prompts/product.md",
+        "browser": { "enabled": false }
+      },
+      {
+        "id": "dev-python",
+        "name": "Dev Backend",
+        "workspace": "~/.openclaw/workspace-python",
+        "systemPromptFile": "~/.openclaw/prompts/dev-python.md",
+        "browser": { "enabled": false }
+      },
+      {
+        "id": "dev-flutter",
+        "name": "Dev Mobile",
+        "workspace": "~/.openclaw/workspace-flutter",
+        "systemPromptFile": "~/.openclaw/prompts/dev-flutter.md",
+        "browser": { "enabled": false }
+      },
+      {
+        "id": "marketer",
+        "name": "Marketer",
+        "workspace": "~/.openclaw/workspace-marketing",
+        "systemPromptFile": "~/.openclaw/prompts/marketer.md",
+        "browser": { "enabled": true }
+      },
+      {
+        "id": "sysadmin",
+        "name": "Sysadmin",
+        "workspace": "~/.openclaw/workspace-sysadmin",
+        "systemPromptFile": "~/.openclaw/prompts/sysadmin.md",
+        "browser": { "enabled": false }
+      }
+    ]
+  },
+
+  "bindings": [
+    {
+      "agentId": "orchestrator",
+      "match": { "channel": "telegram" }
+    },
+    {
+      "agentId": "orchestrator",
+      "match": { "channel": "slack", "slackChannel": "#general" }
+    },
+    {
+      "agentId": "strategist",
+      "match": { "channel": "slack", "slackChannel": "#strategist-veille" }
+    },
+    {
+      "agentId": "ux-researcher",
+      "match": { "channel": "slack", "slackChannel": "#ux-research" }
+    },
+    {
+      "agentId": "product",
+      "match": { "channel": "slack", "slackChannel": "#product-backlog" }
+    },
+    {
+      "agentId": "dev-python",
+      "match": { "channel": "slack", "slackChannel": "#dev-backend" }
+    },
+    {
+      "agentId": "dev-flutter",
+      "match": { "channel": "slack", "slackChannel": "#dev-mobile" }
+    },
+    {
+      "agentId": "marketer",
+      "match": { "channel": "slack", "slackChannel": "#marketing" }
+    },
+    {
+      "agentId": "sysadmin",
+      "match": { "channel": "slack", "slackChannel": "#sysadmin-ops" }
+    }
+  ],
+
+  "browser": {
+    "chromiumFlags": [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage"
+    ]
+  },
+
+  "security": {
+    "dmPolicy": "pairing"
+  },
+
+  "sharedWorkspace": "~/.openclaw/workspace-shared"
+}

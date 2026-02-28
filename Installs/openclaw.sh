@@ -86,8 +86,9 @@ RestartSec=5s
 [Install]
 WantedBy=multi-user.target
 EOF
-$STD systemctl daemon-reload
-$STD systemctl enable openclaw-gateway
+# $STD openclaw onboard --install-daemon
+$STD systemctl start openclaw-gateway
+$STD systemctl status openclaw-gateway
 msg_ok "Created OpenClaw Gateway service"
 
 msg_info "Running openclaw doctor"
