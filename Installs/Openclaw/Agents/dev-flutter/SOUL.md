@@ -1,13 +1,4 @@
-# Dev Mobile — Flutter / Dart
-
-## Identité
-
-Tu es le Dev Mobile, responsable de l'application Flutter destinée aux coachs sportifs.
-Tu construis une UI fluide, intuitive et cohérente qui consomme l'API backend.
-
-Tu travailles exclusivement sur instruction de l'Orchestrator.
-
----
+# Dev Mobile — Règles de fonctionnement
 
 ## Lectures obligatoires AVANT de coder
 
@@ -188,35 +179,14 @@ class ApiKeyInterceptor extends Interceptor {
 ```dart
 // ❌ JAMAIS
 Text('Confirmer la réservation')
-SnackBar(content: Text('Erreur réseau'))
 
 // ✅ TOUJOURS
 Text(AppLocalizations.of(context)!.bookingConfirmButton)
-SnackBar(content: Text(AppLocalizations.of(context)!.errorNetwork))
 ```
 
-**Autres règles i18n :**
 - Montants : toujours depuis centimes, formater avec `NumberFormat.currency`
 - Dates : toujours depuis UTC, convertir avec timezone utilisateur
 - Poids : base en kg, convertir selon `weight_unit` user
-
-```dart
-// Devise
-String formatPrice(int cents, String currency, String locale) {
-  return NumberFormat.currency(locale: locale, symbol: currency).format(cents / 100.0);
-}
-
-// Poids
-String formatWeight(double kg, WeightUnit unit) {
-  if (unit == WeightUnit.lb) return '${(kg * 2.20462).round()} lb';
-  return '$kg kg';
-}
-
-// Date depuis UTC
-String formatDateTime(DateTime utc, String locale) {
-  return DateFormat.yMMMd(locale).add_Hm().format(utc.toLocal());
-}
-```
 
 ---
 
@@ -224,7 +194,6 @@ String formatDateTime(DateTime utc, String locale) {
 
 - API Key stockée uniquement dans `flutter_secure_storage` — jamais en SharedPreferences
 - Drift (cache local) : jamais de champs PII en clair (prénom, nom, email, téléphone)
-  → Les données PII sont toujours re-fetchées depuis l'API
 - Certificate pinning activé sur les endpoints de production
 - Jamais de logs contenant des données personnelles
 
@@ -249,7 +218,6 @@ RÉSUMÉ: <Écrans / fonctionnalités implémentés>
 
 ÉCRANS LIVRÉS:
 - ClientListScreen ✅ (2 passants + 2 non passants)
-- ClientDetailScreen ✅ (1 passant + 1 non passant)
 
 TESTS: <ex: flutter test — 14 passed, 0 failed>
 COMMIT: [PHASE-X][TASK-Y] Description + tests
@@ -275,147 +243,43 @@ BLOCAGES: <Si BLOQUÉ : endpoint manquant, ambiguïté spec, etc.>
 
 ## Définition du Done (DoD)
 
-Une tâche est terminée si et seulement si :
-
 ```
 □ Écrans conformes aux specs (FUNCTIONAL_SPECS_DETAILED.md)
 □ Tous les états UI gérés : loading, data, error, empty
 □ Aucune string codée en dur — tout via AppLocalizations
-□ Architecture MVVM respectée : Screen → Notifier → Repository → ApiService
+□ Architecture MVVM respectée
 □ Aucun appel réseau dans un Widget
 □ Au moins 1 test passant + 1 non passant par Notifier / Provider
 □ flutter test passe à 100% (0 failure, 0 error)
-□ Commit : code + tests + PROGRESS.md — format [PHASE-X][TASK-Y] Description + tests
+□ Commit : code + tests + PROGRESS.md — format [PHASE-X][TASK-Y]
 ```
 
 ---
 
-## Ton
-
-Technique, orienté UX, pragmatique. Tu construis pour les utilisateurs finaux.
-
----
-
-## Setup de l'environnement local
-
-### Prérequis
-- Flutter SDK 3.x : https://flutter.dev/docs/get-started/install
-- Dart SDK (inclus avec Flutter)
-- Android Studio 2024.x (plugin Flutter) ou VSCode (extension Flutter + Dart)
-- Xcode 15+ (macOS uniquement — builds iOS)
-- Chrome (développement web)
-
-```bash
-# Variables d'environnement à ajouter dans ~/.bashrc ou ~/.zshrc
-export PATH="$PATH:/path/to/flutter/bin"
-export ANDROID_HOME=$HOME/Android/Sdk
-export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
-export PATH=$PATH:$ANDROID_HOME/platform-tools
-
-# Vérifier l'installation
-flutter doctor
-```
-
-### Installation
+## Setup environnement local
 
 ```bash
 git clone https://github.com/gaelgael5/mycoach.git
 cd mycoach/frontend
-
 flutter pub get
-
-# Générer les fichiers de code (json_serializable, riverpod_generator, drift)
 dart run build_runner build --delete-conflicting-outputs
 ```
 
 ### Lancer l'application
 
 ```bash
-# Web (développement)
 flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:8000
-
-# Android (émulateur ou device)
 flutter run -d android --dart-define=API_BASE_URL=http://10.0.2.2:8000
-
-# iOS (simulateur — macOS requis)
 flutter run -d ios --dart-define=API_BASE_URL=http://192.168.10.63:8200
 ```
-
-> 📌 `10.0.2.2` est l'IP utilisée par l'émulateur Android pour atteindre `localhost` de la machine hôte.
 
 ### Commandes rapides
 
 ```bash
-flutter pub get                                          # Installer les dépendances
-flutter test                                            # Tests unitaires + widget
-flutter test integration_test/                          # Tests d'intégration
-dart run build_runner build --delete-conflicting-outputs # Regénérer le code
-flutter analyze                                         # Analyser le code
-flutter clean                                           # Nettoyer le build
-flutter build apk --debug                               # Build Android debug
-flutter build web                                       # Build Web
+flutter pub get
+flutter test
+flutter analyze
+dart run build_runner build --delete-conflicting-outputs
+flutter build apk --debug
+flutter build web
 ```
-
-### VSCode — extensions recommandées
-
-```
-dart-code.flutter
-dart-code.dart-code
-eamodio.gitlens
-```
-
-### `.vscode/settings.json` recommandé
-
-```json
-{
-  "editor.formatOnSave": true,
-  "[dart]": {
-    "editor.tabSize": 2,
-    "editor.insertSpaces": true,
-    "editor.formatOnSave": true
-  },
-  "files.exclude": {
-    "**/build": true,
-    "**/.dart_tool": true
-  }
-}
-```
-
----
-
-## CI/CD — AppVeyor (pipeline Flutter)
-
-Le pipeline `frontend/appveyor.yml` fait :
-1. Ubuntu + Flutter SDK préinstallé
-2. `flutter pub get`
-3. `flutter test` (unit + widget tests)
-4. `flutter build apk --debug` (Android)
-5. `flutter build web` (Web)
-6. Publication des artifacts APK + Web téléchargeables depuis AppVeyor
-
-> Pour une distribution automatique sur Google Play/App Store → **Fastlane** (évolution future).
-
-### Variables secrètes AppVeyor à configurer
-
-| Variable | Usage |
-|----------|-------|
-| `KEYSTORE_BASE64` | Keystore Android encodé en base64 |
-| `KEYSTORE_PASSWORD` | Mot de passe keystore |
-| `KEY_ALIAS` | `mycoach` |
-| `KEY_PASSWORD` | Mot de passe clé |
-
-```bash
-# Encoder le keystore en base64 pour AppVeyor
-base64 -w 0 mycoach-release.keystore > keystore.b64
-cat keystore.b64  # copier la valeur dans AppVeyor
-```
-
----
-
-## Checklist avant premier `git push`
-
-- [ ] `google-services.json` dans `.gitignore`
-- [ ] Keystore Android hors du repo
-- [ ] `flutter build web` OK
-- [ ] `flutter test` passe (0 failure)
-- [ ] `frontend/pubspec.yaml` présent et à jour

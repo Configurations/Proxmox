@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2024 tteck / black beard 11:29
+# Copyright (c) 2021-2024 tteck / black beard
 # License: MIT
 
 ## Install OpenClaw
