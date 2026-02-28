@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2024 tteck
-# Author: tteck (tteckster)
-# License: MIT
-
-# Copyright (c) 2021-2024 black beard
-# Author: gael beard
+# Copyright (c) 2021-2024 tteck / black beard 10:27 PM GMT+01:00 02/28/2026
 # License: MIT
 
 ## Install OpenClaw
@@ -50,37 +45,30 @@ mkdir -p /opt/openclaw/state
 $STD npm install -g openclaw
 msg_ok "Installed OpenClaw $(openclaw --version 2>/dev/null || echo '')"
 
-# ── FIX 1 : openclaw setup avant de créer le service ─────────────────────────
-# openclaw setup initialise ~/.openclaw/openclaw.json avec les clés natives
-# (gateway.auth.token, compaction, etc.) sans lesquelles le gateway crashe.
-# Il doit tourner AVANT le premier démarrage du service.
+# ── FIX 1 : openclaw setup AVANT le service ───────────────────────────────────
+# Initialise ~/.openclaw/openclaw.json avec gateway.auth.token et les clés
+# natives. Sans cette étape, le service crashe avec "Missing config".
 msg_info "Running openclaw setup (initialise la config native)"
 openclaw setup 2>&1 || true
 msg_ok "openclaw setup done"
 
-# ── FIX 2 : gateway.bind = "lan" pour rendre le dashboard accessible sur le LAN ──
-# Par défaut openclaw écoute sur 127.0.0.1 — inaccessible depuis l'extérieur du LXC.
-# On injecte gateway.bind dans le JSON généré par setup.
-msg_info "Patching openclaw.json — gateway.bind = lan"
-OPENCLAW_JSON="$HOME/.openclaw/openclaw.json"
-if [ -f "$OPENCLAW_JSON" ]; then
-  # Injecter "bind": "0.0.0.0:18789" dans la section gateway existante
-  node -e "
-    const fs = require('fs');
-    const cfg = JSON.parse(fs.readFileSync('$OPENCLAW_JSON', 'utf8'));
-    if (!cfg.gateway) cfg.gateway = {};
-    cfg.gateway.bind = 'lan';
-    fs.writeFileSync('$OPENCLAW_JSON', JSON.stringify(cfg, null, 2));
-    console.log('gateway.bind patched');
-  "
-  msg_ok "gateway.bind = lan (0.0.0.0)"
-else
-  msg_error "openclaw.json introuvable après setup — vérifier manuellement"
-fi
+# ── FIX 2 : gateway.mode = local (loopback) ───────────────────────────────────
+# OpenClaw refuse de démarrer sans gateway.mode explicite.
+# On reste sur loopback (127.0.0.1) — accès via tunnel SSH depuis Windows.
+# bind: "lan" ou "0.0.0.0" déclenche une erreur controlUi.allowedOrigins.
+msg_info "Patching openclaw.json — gateway.mode = local"
+node -e "
+  const fs = require('fs');
+  const p = '/root/.openclaw/openclaw.json';
+  const cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
+  if (!cfg.gateway) cfg.gateway = {};
+  cfg.gateway.mode = 'local';
+  fs.writeFileSync(p, JSON.stringify(cfg, null, 2));
+  console.log('gateway.mode patched');
+"
+msg_ok "gateway.mode = local (loopback — accès via tunnel SSH)"
 
-# ── FIX 3 : variables d'environnement avec chemin absolu ─────────────────────
-# Le service systemd tourne en root mais sans shell interactif — HOME est /root.
-# On utilise /root/.openclaw explicitement pour éviter tout problème de résolution.
+# ── FIX 3 : variables d'environnement avec chemin absolu /root ────────────────
 msg_info "Setting up environment"
 cat >> /etc/environment <<'EOF'
 OPENCLAW_HOME=/opt/openclaw
@@ -89,9 +77,10 @@ OPENCLAW_CONFIG_PATH=/root/.openclaw/openclaw.json
 EOF
 msg_ok "Environment configured"
 
-# ── FIX 4 : service systemd avec HOME et config path explicites ───────────────
-# Sans Environment=HOME=/root, systemd ne résout pas ~ dans openclaw.json.
-# On pointe explicitement vers /root/.openclaw/openclaw.json.
+# ── FIX 4 : service systemd avec HOME=/root et systemctl enable ───────────────
+# HOME requis pour que systemd résolve les chemins ~/.openclaw correctement.
+# systemctl enable pour redémarrage automatique après reboot.
+# On supprime le "systemctl status" qui retourne exit code 1 et plante le script.
 msg_info "Creating systemd service"
 cat > /etc/systemd/system/openclaw-gateway.service <<'EOF'
 [Unit]
@@ -112,12 +101,13 @@ RestartSec=5s
 [Install]
 WantedBy=multi-user.target
 EOF
-$STD systemctl daemon-reload
-$STD systemctl enable openclaw-gateway
-$STD systemctl start openclaw-gateway
+systemctl daemon-reload
+systemctl enable openclaw-gateway
+systemctl start openclaw-gateway
 sleep 3
-$STD systemctl status openclaw-gateway
-msg_ok "Created and started OpenClaw Gateway service"
+systemctl is-active openclaw-gateway \
+  && msg_ok "OpenClaw Gateway service started" \
+  || msg_error "Service failed — run: journalctl -u openclaw-gateway -n 20"
 
 msg_info "Running openclaw doctor"
 openclaw doctor 2>&1 || true
@@ -133,20 +123,24 @@ msg_ok "Cleaned"
 
 IP=$(hostname -I | awk '{print $1}')
 TOKEN=$(node -e "
-  const fs = require('fs');
   try {
-    const cfg = JSON.parse(fs.readFileSync('/root/.openclaw/openclaw.json', 'utf8'));
-    console.log(cfg.gateway?.auth?.token || 'voir ~/.openclaw/openclaw.json');
-  } catch(e) { console.log('voir ~/.openclaw/openclaw.json'); }
+    const cfg = JSON.parse(require('fs').readFileSync('/root/.openclaw/openclaw.json','utf8'));
+    console.log(cfg.gateway && cfg.gateway.auth && cfg.gateway.auth.token ? cfg.gateway.auth.token : 'voir openclaw.json');
+  } catch(e) { console.log('voir openclaw.json'); }
 " 2>/dev/null)
 
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  ✅ OpenClaw installé avec succès !"
 echo ""
-echo "  Dashboard : http://${IP}:18789"
+echo "  🔒 Dashboard accessible via tunnel SSH uniquement (loopback)"
+echo ""
+echo "  Depuis Windows (PowerShell) :"
+echo "  ssh -L 18789:127.0.0.1:18789 root@${IP} -N"
+echo ""
+echo "  Puis dans le navigateur : http://127.0.0.1:18789"
 echo "  Token     : ${TOKEN}"
 echo ""
 echo "  Prochaine étape — installer les agents :"
 echo "  bash -c \"\$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/Installs/Teams/Project_mobile_application/install-agents.sh)\""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
