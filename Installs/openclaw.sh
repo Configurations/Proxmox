@@ -81,6 +81,22 @@ fi
 # ── FIX 3 : variables d'environnement avec chemin absolu ─────────────────────
 # Le service systemd tourne en root mais sans shell interactif — HOME est /root.
 # On utilise /root/.openclaw explicitement pour éviter tout problème de résolution.
+msg_info "Running openclaw setup"
+openclaw setup 2>&1 || true
+msg_ok "openclaw setup done"
+
+msg_info "Patching gateway.bind"
+node -e "
+  const fs = require('fs');
+  const p = '/root/.openclaw/openclaw.json';
+  const cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
+  if (!cfg.gateway) cfg.gateway = {};
+  cfg.gateway.bind = '0.0.0.0:18789';
+  fs.writeFileSync(p, JSON.stringify(cfg, null, 2));
+  console.log('gateway.bind patched');
+"
+msg_ok "gateway.bind = 0.0.0.0:18789"
+
 msg_info "Setting up environment"
 cat >> /etc/environment <<'EOF'
 OPENCLAW_HOME=/opt/openclaw
@@ -93,7 +109,8 @@ msg_ok "Environment configured"
 # Sans Environment=HOME=/root, systemd ne résout pas ~ dans openclaw.json.
 # On pointe explicitement vers /root/.openclaw/openclaw.json.
 msg_info "Creating systemd service"
-cat > /etc/systemd/system/openclaw-gateway.service <<'EOF'
+OPENCLAW_BIN=$(command -v openclaw)
+cat > /etc/systemd/system/openclaw-gateway.service <<EOF
 [Unit]
 Description=OpenClaw Gateway
 After=network.target
@@ -105,19 +122,18 @@ Environment="HOME=/root"
 Environment="OPENCLAW_HOME=/opt/openclaw"
 Environment="OPENCLAW_STATE_DIR=/opt/openclaw/state"
 Environment="OPENCLAW_CONFIG_PATH=/root/.openclaw/openclaw.json"
-ExecStart=/usr/bin/openclaw gateway --port 18789
+ExecStart=${OPENCLAW_BIN} gateway
 Restart=on-failure
 RestartSec=5s
 
 [Install]
 WantedBy=multi-user.target
 EOF
-$STD systemctl daemon-reload
-$STD systemctl enable openclaw-gateway
-$STD systemctl start openclaw-gateway
+systemctl daemon-reload
+systemctl enable openclaw-gateway
+systemctl start openclaw-gateway
 sleep 3
-$STD systemctl status openclaw-gateway
-msg_ok "Created and started OpenClaw Gateway service"
+systemctl is-active openclaw-gateway && msg_ok "OpenClaw Gateway service started" || msg_error "Service failed to start — run: journalctl -u openclaw-gateway -n 20"
 
 msg_info "Running openclaw doctor"
 openclaw doctor 2>&1 || true
