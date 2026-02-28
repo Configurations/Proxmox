@@ -100,7 +100,7 @@ cfg.sharedWorkspace = '/root/.openclaw/workspace-shared';
 
 // gateway.bind — s'assurer qu'il est bien présent (au cas où openclaw.sh ne l'a pas injecté)
 if (!cfg.gateway) cfg.gateway = {};
-if (!cfg.gateway.bind) cfg.gateway.bind = '0.0.0.0:18789';
+if (!cfg.gateway.bind) cfg.gateway.bind = 'lan';
 
 fs.writeFileSync('$OPENCLAW_JSON', JSON.stringify(cfg, null, 2));
 console.log('✅ openclaw.json fusionné avec succès');

@@ -58,10 +58,10 @@ msg_info "Running openclaw setup (initialise la config native)"
 openclaw setup 2>&1 || true
 msg_ok "openclaw setup done"
 
-# ── FIX 2 : gateway.bind = 0.0.0.0 pour rendre le dashboard accessible ───────
+# ── FIX 2 : gateway.bind = "lan" pour rendre le dashboard accessible sur le LAN ──
 # Par défaut openclaw écoute sur 127.0.0.1 — inaccessible depuis l'extérieur du LXC.
 # On injecte gateway.bind dans le JSON généré par setup.
-msg_info "Patching openclaw.json — gateway.bind 0.0.0.0"
+msg_info "Patching openclaw.json — gateway.bind = lan"
 OPENCLAW_JSON="$HOME/.openclaw/openclaw.json"
 if [ -f "$OPENCLAW_JSON" ]; then
   # Injecter "bind": "0.0.0.0:18789" dans la section gateway existante
@@ -69,11 +69,11 @@ if [ -f "$OPENCLAW_JSON" ]; then
     const fs = require('fs');
     const cfg = JSON.parse(fs.readFileSync('$OPENCLAW_JSON', 'utf8'));
     if (!cfg.gateway) cfg.gateway = {};
-    cfg.gateway.bind = '0.0.0.0:18789';
+    cfg.gateway.bind = 'lan';
     fs.writeFileSync('$OPENCLAW_JSON', JSON.stringify(cfg, null, 2));
     console.log('gateway.bind patched');
   "
-  msg_ok "gateway.bind = 0.0.0.0:18789"
+  msg_ok "gateway.bind = lan (0.0.0.0)"
 else
   msg_error "openclaw.json introuvable après setup — vérifier manuellement"
 fi
@@ -81,22 +81,6 @@ fi
 # ── FIX 3 : variables d'environnement avec chemin absolu ─────────────────────
 # Le service systemd tourne en root mais sans shell interactif — HOME est /root.
 # On utilise /root/.openclaw explicitement pour éviter tout problème de résolution.
-msg_info "Running openclaw setup"
-openclaw setup 2>&1 || true
-msg_ok "openclaw setup done"
-
-msg_info "Patching gateway.bind"
-node -e "
-  const fs = require('fs');
-  const p = '/root/.openclaw/openclaw.json';
-  const cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
-  if (!cfg.gateway) cfg.gateway = {};
-  cfg.gateway.bind = '0.0.0.0:18789';
-  fs.writeFileSync(p, JSON.stringify(cfg, null, 2));
-  console.log('gateway.bind patched');
-"
-msg_ok "gateway.bind = 0.0.0.0:18789"
-
 msg_info "Setting up environment"
 cat >> /etc/environment <<'EOF'
 OPENCLAW_HOME=/opt/openclaw
@@ -109,8 +93,7 @@ msg_ok "Environment configured"
 # Sans Environment=HOME=/root, systemd ne résout pas ~ dans openclaw.json.
 # On pointe explicitement vers /root/.openclaw/openclaw.json.
 msg_info "Creating systemd service"
-OPENCLAW_BIN=$(command -v openclaw)
-cat > /etc/systemd/system/openclaw-gateway.service <<EOF
+cat > /etc/systemd/system/openclaw-gateway.service <<'EOF'
 [Unit]
 Description=OpenClaw Gateway
 After=network.target
@@ -122,18 +105,19 @@ Environment="HOME=/root"
 Environment="OPENCLAW_HOME=/opt/openclaw"
 Environment="OPENCLAW_STATE_DIR=/opt/openclaw/state"
 Environment="OPENCLAW_CONFIG_PATH=/root/.openclaw/openclaw.json"
-ExecStart=${OPENCLAW_BIN} gateway
+ExecStart=/usr/bin/openclaw gateway --port 18789
 Restart=on-failure
 RestartSec=5s
 
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl daemon-reload
-systemctl enable openclaw-gateway
-systemctl start openclaw-gateway
+$STD systemctl daemon-reload
+$STD systemctl enable openclaw-gateway
+$STD systemctl start openclaw-gateway
 sleep 3
-systemctl is-active openclaw-gateway && msg_ok "OpenClaw Gateway service started" || msg_error "Service failed to start — run: journalctl -u openclaw-gateway -n 20"
+$STD systemctl status openclaw-gateway
+msg_ok "Created and started OpenClaw Gateway service"
 
 msg_info "Running openclaw doctor"
 openclaw doctor 2>&1 || true
@@ -158,13 +142,11 @@ TOKEN=$(node -e "
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  ✅ OpenClaw install successful !"
+echo "  ✅ OpenClaw installé avec succès !"
 echo ""
 echo "  Dashboard : http://${IP}:18789"
 echo "  Token     : ${TOKEN}"
 echo ""
-echo "  Next step — install agents :"
-echo "  Available team to work on project mobile application :"
-echo "  enter in the container : pct enter ${CTID}"
+echo "  Prochaine étape — installer les agents :"
 echo "  bash -c \"\$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/Installs/Teams/Project_mobile_application/install-agents.sh)\""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
