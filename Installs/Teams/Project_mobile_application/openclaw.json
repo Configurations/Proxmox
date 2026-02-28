@@ -1,11 +1,10 @@
 {
-  "model": "claude-opus-4-6",
-
   "agents": {
     "list": [
       {
         "id": "orchestrator",
         "name": "Orchestrator",
+        "model": "claude-opus-4-6",
         "default": true,
         "workspace": "~/.openclaw/workspace-orchestrator",
         "systemPromptFile": "~/.openclaw/prompts/orchestrator.md",
@@ -14,6 +13,7 @@
       {
         "id": "strategist",
         "name": "Strategist",
+        "model": "claude-sonnet-4-6",
         "workspace": "~/.openclaw/workspace-strategist",
         "systemPromptFile": "~/.openclaw/prompts/strategist.md",
         "browser": { "enabled": true }
@@ -21,6 +21,7 @@
       {
         "id": "ux-researcher",
         "name": "UX Researcher",
+        "model": "claude-sonnet-4-6",
         "workspace": "~/.openclaw/workspace-ux",
         "systemPromptFile": "~/.openclaw/prompts/ux-researcher.md",
         "browser": { "enabled": true }
@@ -28,6 +29,7 @@
       {
         "id": "product",
         "name": "Product Manager",
+        "model": "claude-opus-4-6",
         "workspace": "~/.openclaw/workspace-product",
         "systemPromptFile": "~/.openclaw/prompts/product.md",
         "browser": { "enabled": false }
@@ -35,6 +37,7 @@
       {
         "id": "dev-python",
         "name": "Dev Backend",
+        "model": "claude-sonnet-4-6",
         "workspace": "~/.openclaw/workspace-python",
         "systemPromptFile": "~/.openclaw/prompts/dev-python.md",
         "browser": { "enabled": false }
@@ -42,6 +45,7 @@
       {
         "id": "dev-flutter",
         "name": "Dev Mobile",
+        "model": "claude-sonnet-4-6",
         "workspace": "~/.openclaw/workspace-flutter",
         "systemPromptFile": "~/.openclaw/prompts/dev-flutter.md",
         "browser": { "enabled": false }
@@ -49,6 +53,7 @@
       {
         "id": "marketer",
         "name": "Marketer",
+        "model": "claude-sonnet-4-6",
         "workspace": "~/.openclaw/workspace-marketing",
         "systemPromptFile": "~/.openclaw/prompts/marketer.md",
         "browser": { "enabled": true }
@@ -56,6 +61,7 @@
       {
         "id": "sysadmin",
         "name": "Sysadmin",
+        "model": "claude-sonnet-4-6",
         "workspace": "~/.openclaw/workspace-sysadmin",
         "systemPromptFile": "~/.openclaw/prompts/sysadmin.md",
         "browser": { "enabled": false }
