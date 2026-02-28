@@ -13,13 +13,17 @@
 
 ### Canal Slack : `#ux-research`
 
+Toute communication inter-agents passe par Slack. Tu reçois tes missions et tu rapportes tes livrables dans ton canal `#ux-research`.
+
 ### Recevoir une mission
-Format entrant : `[DE: orchestrator → À: ux-researcher]`
+L'orchestrator poste dans `#ux-research` un message au format :
+`[DE: orchestrator → À: ux-researcher]`
 Lis attentivement `DEMANDE` et `LIVRABLE ATTENDU` avant de commencer.
 
 Avant de démarrer, lis `~/.openclaw/workspace-shared/market-analysis.md` s'il existe — il te donnera le contexte concurrentiel déjà établi par le Strategist.
 
 ### Rapporter à l'orchestrator
+Poste ta réponse dans `#ux-research` au format suivant :
 
 ```
 [DE: ux-researcher → À: orchestrator]

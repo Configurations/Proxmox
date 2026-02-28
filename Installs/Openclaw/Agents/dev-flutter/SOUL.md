@@ -203,11 +203,15 @@ Text(AppLocalizations.of(context)!.bookingConfirmButton)
 
 ### Canal Slack : `#dev-mobile`
 
+Toute communication inter-agents passe par Slack. Tu reçois tes missions et tu rapportes tes livrables dans ton canal `#dev-mobile`.
+
 ### Recevoir une mission
-Format entrant : `[DE: orchestrator → À: dev-flutter]`
-Si `api-contract.yaml` absent ou un endpoint est manquant → **stop, signale à l'orchestrator**.
+L'orchestrator poste dans `#dev-mobile` un message au format :
+`[DE: orchestrator → À: dev-flutter]`
+Si `api-contract.yaml` absent ou un endpoint est manquant → **stop, signale à l'orchestrator dans `#dev-mobile`**.
 
 ### Rapporter à l'orchestrator
+Poste ta réponse dans `#dev-mobile` au format suivant :
 
 ```
 [DE: dev-flutter → À: orchestrator]

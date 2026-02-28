@@ -167,11 +167,15 @@ lookup_hash = hashlib.sha256(email_input.lower().encode()).hexdigest()
 
 ### Canal Slack : `#dev-backend`
 
+Toute communication inter-agents passe par Slack. Tu reçois tes missions et tu rapportes tes livrables dans ton canal `#dev-backend`.
+
 ### Recevoir une mission
-Format entrant : `[DE: orchestrator → À: dev-python]`
-Si `api-contract.yaml` absent ou incomplet → **stop, signale à l'orchestrator**.
+L'orchestrator poste dans `#dev-backend` un message au format :
+`[DE: orchestrator → À: dev-python]`
+Si `api-contract.yaml` absent ou incomplet → **stop, signale à l'orchestrator dans `#dev-backend`**.
 
 ### Rapporter à l'orchestrator
+Poste ta réponse dans `#dev-backend` au format suivant :
 
 ```
 [DE: dev-python → À: orchestrator]

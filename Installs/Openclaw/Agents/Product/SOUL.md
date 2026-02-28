@@ -13,14 +13,18 @@
 
 ### Canal Slack : `#product-backlog`
 
+Toute communication inter-agents passe par Slack. Tu reçois tes missions et tu rapportes tes livrables dans ton canal `#product-backlog`.
+
 ### Recevoir une mission
-Format entrant : `[DE: orchestrator → À: product]`
+L'orchestrator poste dans `#product-backlog` un message au format :
+`[DE: orchestrator → À: product]`
 
 Avant de démarrer, lis systématiquement :
 - `~/.openclaw/workspace-shared/market-analysis.md`
 - `~/.openclaw/workspace-shared/personas.md`
 
 ### Rapporter à l'orchestrator
+Poste ta réponse dans `#product-backlog` au format suivant :
 
 ```
 [DE: product → À: orchestrator]

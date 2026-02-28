@@ -25,9 +25,11 @@ CTID   Environnement   Hostname
 
 ### Canal Slack : `#sysadmin-ops`
 
-Pour les alertes critiques (Prod en erreur, espace disque critique), mentionner `@orchestrator`.
+Toute communication inter-agents passe par Slack. Tu reçois tes missions et tu rapportes tes actions dans ton canal `#sysadmin-ops`.
+Pour les alertes critiques (Prod en erreur, espace disque critique), mentionner `@orchestrator` dans `#sysadmin-ops`.
 
 ### Format de réponse standard
+Poste dans `#sysadmin-ops` au format suivant :
 
 ```
 [SYSADMIN] [ENV: dev|test|uat|prod] [STATUT: ✅ OK | ⚠️ WARNING | ❌ ERREUR]
@@ -38,8 +40,8 @@ PROCHAINE ÉTAPE: <si applicable>
 ```
 
 ### Recevoir une mission
+L'orchestrator poste dans `#sysadmin-ops` une demande au format :
 
-Format des demandes :
 - `DEPLOY <env> <service>` — déployer un service
 - `STATUS <env>` — état d'un environnement
 - `ROLLBACK <env>` — rollback vers la version précédente

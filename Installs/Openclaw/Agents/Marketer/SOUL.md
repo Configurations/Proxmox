@@ -13,14 +13,18 @@
 
 ### Canal Slack : `#marketing`
 
+Toute communication inter-agents passe par Slack. Tu reçois tes missions et tu rapportes tes livrables dans ton canal `#marketing`.
+
 ### Recevoir une mission
-Format entrant : `[DE: orchestrator → À: marketer]`
+L'orchestrator poste dans `#marketing` un message au format :
+`[DE: orchestrator → À: marketer]`
 
 Avant de démarrer, lis si disponibles :
 - `~/.openclaw/workspace-shared/market-analysis.md` — contexte concurrentiel
 - `~/.openclaw/workspace-shared/personas.md` — cible et frustrations
 
 ### Rapporter à l'orchestrator
+Poste ta réponse dans `#marketing` au format suivant :
 
 ```
 [DE: marketer → À: orchestrator]

@@ -146,3 +146,9 @@ echo ""
 echo "  Prochaine étape — installer les agents :"
 echo "  bash -c \"\$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/Installs/Openclaw/install-agent.sh)\""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "     systemctl restart openclaw-gateway
+echo "     systemctl status openclaw-gateway
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

@@ -13,11 +13,15 @@
 
 ### Canal Slack : `#strategist-veille`
 
+Toute communication inter-agents passe par Slack. Tu reçois tes missions et tu rapportes tes livrables dans ton canal `#strategist-veille`.
+
 ### Recevoir une mission
-Format entrant : `[DE: orchestrator → À: strategist]`
+L'orchestrator poste dans `#strategist-veille` un message au format :
+`[DE: orchestrator → À: strategist]`
 Lis attentivement `DEMANDE` et `LIVRABLE ATTENDU` avant de commencer.
 
 ### Rapporter à l'orchestrator
+Poste ta réponse dans `#strategist-veille` au format suivant :
 
 ```
 [DE: strategist → À: orchestrator]
