@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2024 tteck / black beard 10:27 PM GMT+01:00 02/28/2026
+# Copyright (c) 2021-2024 tteck / black beard 11:29
 # License: MIT
 
 ## Install OpenClaw
@@ -45,44 +45,55 @@ mkdir -p /opt/openclaw/state
 $STD npm install -g openclaw
 msg_ok "Installed OpenClaw $(openclaw --version 2>/dev/null || echo '')"
 
-# ── FIX 1 : openclaw setup AVANT le service ───────────────────────────────────
-# Initialise ~/.openclaw/openclaw.json avec gateway.auth.token et les clés
-# natives. Sans cette étape, le service crashe avec "Missing config".
-msg_info "Running openclaw setup (initialise la config native)"
+# ── Extraire le mot de passe root depuis $PASSWORD (format: "-password xxx") ──
+# $PASSWORD est exporté par build_container() depuis build.func.
+# On l'écrit dans .secrets pour que install-agents.sh puisse le lire.
+msg_info "Storing dashboard credentials"
+mkdir -p /root/.openclaw
+DASHBOARD_PASSWORD=""
+if [[ "$PASSWORD" == -password* ]]; then
+  DASHBOARD_PASSWORD="${PASSWORD#-password }"
+fi
+if [ -z "$DASHBOARD_PASSWORD" ]; then
+  # Pas de mot de passe défini (automatic login) — on en génère un
+  DASHBOARD_PASSWORD=$(tr -dc 'A-Za-z0-9!@#%^&*' < /dev/urandom | head -c 16)
+fi
+echo "DASHBOARD_PASSWORD=${DASHBOARD_PASSWORD}" > /root/.openclaw/.secrets
+chmod 600 /root/.openclaw/.secrets
+msg_ok "Credentials stored in /root/.openclaw/.secrets"
+
+# ── openclaw setup (initialise openclaw.json avec les clés natives) ───────────
+msg_info "Running openclaw setup"
 openclaw setup 2>&1 || true
 msg_ok "openclaw setup done"
 
-# ── FIX 2 : gateway.mode = local (loopback) ───────────────────────────────────
-# OpenClaw refuse de démarrer sans gateway.mode explicite.
-# On reste sur loopback (127.0.0.1) — accès via tunnel SSH depuis Windows.
-# bind: "lan" ou "0.0.0.0" déclenche une erreur controlUi.allowedOrigins.
-msg_info "Patching openclaw.json — gateway.mode = local"
-node -e "
-  const fs = require('fs');
-  const p = '/root/.openclaw/openclaw.json';
-  const cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
-  if (!cfg.gateway) cfg.gateway = {};
-  cfg.gateway.mode = 'local';
-  fs.writeFileSync(p, JSON.stringify(cfg, null, 2));
-  console.log('gateway.mode patched');
-"
-msg_ok "gateway.mode = local (loopback — accès via tunnel SSH)"
+# ── Patch gateway.mode = local + auth password ────────────────────────────────
+msg_info "Patching openclaw.json"
+DASHBOARD_PASSWORD="$DASHBOARD_PASSWORD" node << 'NODEJS'
+const fs  = require('fs');
+const p   = '/root/.openclaw/openclaw.json';
+const cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
+const pwd = process.env.DASHBOARD_PASSWORD;
+if (!cfg.gateway) cfg.gateway = {};
+cfg.gateway.mode = 'local';
+cfg.gateway.auth = { mode: 'password', password: pwd };
+fs.writeFileSync(p, JSON.stringify(cfg, null, 2));
+console.log('gateway patched');
+NODEJS
+msg_ok "gateway.mode = local, auth = password"
 
-# ── FIX 3 : variables d'environnement avec chemin absolu /root ────────────────
+# ── Variables d'environnement ─────────────────────────────────────────────────
 msg_info "Setting up environment"
-cat >> /etc/environment <<'EOF'
+cat >> /etc/environment << 'EOF'
 OPENCLAW_HOME=/opt/openclaw
 OPENCLAW_STATE_DIR=/opt/openclaw/state
 OPENCLAW_CONFIG_PATH=/root/.openclaw/openclaw.json
 EOF
 msg_ok "Environment configured"
 
-# ── FIX 4 : service systemd avec HOME=/root et systemctl enable ───────────────
-# HOME requis pour que systemd résolve les chemins ~/.openclaw correctement.
-# systemctl enable pour redémarrage automatique après reboot.
-# On supprime le "systemctl status" qui retourne exit code 1 et plante le script.
+# ── Service systemd ───────────────────────────────────────────────────────────
 msg_info "Creating systemd service"
-cat > /etc/systemd/system/openclaw-gateway.service <<'EOF'
+cat > /etc/systemd/system/openclaw-gateway.service << 'EOF'
 [Unit]
 Description=OpenClaw Gateway
 After=network.target
@@ -122,24 +133,15 @@ $STD apt-get -y autoclean
 msg_ok "Cleaned"
 
 IP=$(hostname -I | awk '{print $1}')
-TOKEN=$(node -e "
-  try {
-    const cfg = JSON.parse(require('fs').readFileSync('/root/.openclaw/openclaw.json','utf8'));
-    console.log(cfg.gateway && cfg.gateway.auth && cfg.gateway.auth.token ? cfg.gateway.auth.token : 'voir openclaw.json');
-  } catch(e) { console.log('voir openclaw.json'); }
-" 2>/dev/null)
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  ✅ OpenClaw installé avec succès !"
 echo ""
-echo "  🔒 Dashboard accessible via tunnel SSH uniquement (loopback)"
-echo ""
-echo "  Depuis Windows (PowerShell) :"
-echo "  ssh -L 18789:127.0.0.1:18789 root@${IP} -N"
-echo ""
-echo "  Puis dans le navigateur : http://127.0.0.1:18789"
-echo "  Token     : ${TOKEN}"
+echo "  🔒 Dashboard via tunnel SSH (Windows PowerShell) :"
+echo "     ssh -L 18789:127.0.0.1:18789 root@${IP} -N"
+echo "     Puis : http://127.0.0.1:18789"
+echo "     Mot de passe dashboard : ${DASHBOARD_PASSWORD}"
 echo ""
 echo "  Prochaine étape — installer les agents :"
 echo "  bash -c \"\$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/Installs/Teams/Project_mobile_application/install-agents.sh)\""

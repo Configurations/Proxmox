@@ -1,116 +1,122 @@
 #!/bin/bash
 # install-agents.sh
-# Configure tous les agents OpenClaw pour le projet coaching sportif
-# À exécuter DANS le container LXC après l'installation openclaw.sh
+# Configure les 8 agents OpenClaw pour le projet coaching sportif mobile
+# bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/Installs/Teams/Project_mobile_application/install-agents.sh)"
 
 set -e
 
-# ── FIX 5 : chemins absolus — ~ non résolu dans certains contextes bash ───────
 OPENCLAW_DIR="/root/.openclaw"
 PROMPTS_DIR="$OPENCLAW_DIR/prompts"
 SHARED_DIR="$OPENCLAW_DIR/workspace-shared"
 OPENCLAW_JSON="$OPENCLAW_DIR/openclaw.json"
+OPENCLAW_SECRETS="$OPENCLAW_DIR/.secrets"
 BASE_URL="https://raw.githubusercontent.com/Configurations/Proxmox/refs/heads/main/Installs/Teams/Project_mobile_application"
 
-echo "🔧 Installation des agents OpenClaw..."
+echo "🔧 Installation des agents OpenClaw — Projet Mobile"
+echo ""
 
-# ── 1. Créer les dossiers ──────────────────────────────────────────────────────
-echo "📁 Création des workspaces..."
-mkdir -p "$PROMPTS_DIR"
-mkdir -p "$SHARED_DIR/marketing/copy"
-mkdir -p "$OPENCLAW_DIR/workspace-orchestrator"
-mkdir -p "$OPENCLAW_DIR/workspace-strategist"
-mkdir -p "$OPENCLAW_DIR/workspace-ux"
-mkdir -p "$OPENCLAW_DIR/workspace-product"
-mkdir -p "$OPENCLAW_DIR/workspace-python"
-mkdir -p "$OPENCLAW_DIR/workspace-flutter"
-mkdir -p "$OPENCLAW_DIR/workspace-marketing"
-mkdir -p "$OPENCLAW_DIR/workspace-sysadmin"
-echo "  ✅ Workspaces créés"
-
-# ── 2. Télécharger les system prompts ─────────────────────────────────────────
-echo "📝 Téléchargement des system prompts..."
-for agent in orchestrator strategist ux-researcher product dev-python dev-flutter marketer sysadmin; do
-  wget -qO "$PROMPTS_DIR/$agent.md" "$BASE_URL/prompts/$agent.md" \
-    && echo "  ✅ $agent.md" \
-    || echo "  ⚠️  $agent.md introuvable sur $BASE_URL"
-done
-
-# ── 3. FIX PRINCIPAL : fusionner la config agents dans openclaw.json ──────────
-# On ne remplace PAS openclaw.json — on y injecte nos clés (agents, bindings,
-# browser, sharedWorkspace) tout en préservant les clés natives générées par
-# openclaw setup (gateway.auth.token, compaction, wizard, meta...).
-echo "⚙️  Fusion de la config agents dans openclaw.json..."
-
+# ── Vérification prérequis ────────────────────────────────────────────────────
 if [ ! -f "$OPENCLAW_JSON" ]; then
-  echo "  ❌ $OPENCLAW_JSON introuvable — as-tu bien lancé openclaw.sh avant ?"
+  echo "❌ $OPENCLAW_JSON introuvable — lance openclaw.sh en premier"
   exit 1
 fi
 
-# Backup avant fusion
-cp "$OPENCLAW_JSON" "$OPENCLAW_JSON.pre-agents.bak"
-echo "  📦 Backup créé : openclaw.json.pre-agents.bak"
+# ── 1. Récupérer le mot de passe dashboard depuis .secrets ───────────────────
+# .secrets est écrit par openclaw.sh à partir du mot de passe root du container ($PASSWORD)
+echo "🔑 Récupération des credentials..."
 
-# Fusion via Node.js — injecte nos clés sans toucher aux clés natives
-node -e "
-const fs = require('fs');
-const cfg = JSON.parse(fs.readFileSync('$OPENCLAW_JSON', 'utf8'));
+DASHBOARD_PASSWORD=""
+if [ -f "$OPENCLAW_SECRETS" ]; then
+  DASHBOARD_PASSWORD=$(grep '^DASHBOARD_PASSWORD=' "$OPENCLAW_SECRETS" | cut -d= -f2-)
+  if [ -n "$DASHBOARD_PASSWORD" ]; then
+    echo "  ✅ Mot de passe récupéré depuis .secrets"
+  fi
+fi
+
+# Fallback si lancé manuellement sans openclaw.sh
+if [ -z "$DASHBOARD_PASSWORD" ]; then
+  echo "  ⚠️  .secrets introuvable — génération d'un nouveau mot de passe"
+  DASHBOARD_PASSWORD=$(tr -dc 'A-Za-z0-9!@#%^&*' < /dev/urandom | head -c 16)
+  echo "DASHBOARD_PASSWORD=${DASHBOARD_PASSWORD}" > "$OPENCLAW_SECRETS"
+  chmod 600 "$OPENCLAW_SECRETS"
+  echo "  ✅ Nouveau mot de passe stocké dans .secrets"
+fi
+
+# ── 2. Créer les workspaces ───────────────────────────────────────────────────
+echo "📁 Création des workspaces..."
+mkdir -p "$PROMPTS_DIR"
+mkdir -p "$SHARED_DIR/marketing/copy"
+for ws in orchestrator strategist ux product python flutter marketing sysadmin; do
+  mkdir -p "$OPENCLAW_DIR/workspace-$ws"
+done
+echo "  ✅ Workspaces créés"
+
+# ── 3. Télécharger les system prompts ────────────────────────────────────────
+echo "📝 Téléchargement des system prompts..."
+for agent in orchestrator strategist ux-researcher product dev-python dev-flutter marketer sysadmin; do
+  if wget -qO "$PROMPTS_DIR/$agent.md" "$BASE_URL/prompts/$agent.md" 2>/dev/null; then
+    echo "  ✅ $agent.md"
+  else
+    echo "  ⚠️  $agent.md introuvable sur le repo"
+  fi
+done
+
+# ── 4. Fusion dans openclaw.json ─────────────────────────────────────────────
+echo "⚙️  Fusion de la config agents dans openclaw.json..."
+cp "$OPENCLAW_JSON" "$OPENCLAW_JSON.pre-agents.bak"
+echo "  📦 Backup : openclaw.json.pre-agents.bak"
+
+DASHBOARD_PASSWORD="$DASHBOARD_PASSWORD" node << 'NODEJS'
+const fs  = require('fs');
+const p   = '/root/.openclaw/openclaw.json';
+const cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
+const pwd = process.env.DASHBOARD_PASSWORD;
+
+// Gateway
+if (!cfg.gateway) cfg.gateway = {};
+cfg.gateway.mode = 'local';
+cfg.gateway.auth = { mode: 'password', password: pwd };
 
 // Agents
 if (!cfg.agents) cfg.agents = {};
 if (!cfg.agents.defaults) cfg.agents.defaults = {};
-
-// Préserver les defaults natifs (compaction, maxConcurrent...) et ajouter workspace
 cfg.agents.defaults.workspace = '/root/.openclaw/workspace';
 
 cfg.agents.list = [
-  { id: 'orchestrator',  name: 'Orchestrator',    model: 'claude-opus-4-6',   default: true, workspace: '/root/.openclaw/workspace-orchestrator', systemPromptFile: '/root/.openclaw/prompts/orchestrator.md',  browser: { enabled: false } },
-  { id: 'strategist',    name: 'Strategist',       model: 'claude-sonnet-4-6', workspace: '/root/.openclaw/workspace-strategist',   systemPromptFile: '/root/.openclaw/prompts/strategist.md',    browser: { enabled: true  } },
-  { id: 'ux-researcher', name: 'UX Researcher',    model: 'claude-sonnet-4-6', workspace: '/root/.openclaw/workspace-ux',            systemPromptFile: '/root/.openclaw/prompts/ux-researcher.md', browser: { enabled: true  } },
-  { id: 'product',       name: 'Product Manager',  model: 'claude-opus-4-6',   workspace: '/root/.openclaw/workspace-product',       systemPromptFile: '/root/.openclaw/prompts/product.md',       browser: { enabled: false } },
-  { id: 'dev-python',    name: 'Dev Backend',      model: 'claude-sonnet-4-6', workspace: '/root/.openclaw/workspace-python',        systemPromptFile: '/root/.openclaw/prompts/dev-python.md',    browser: { enabled: false } },
-  { id: 'dev-flutter',   name: 'Dev Mobile',       model: 'claude-sonnet-4-6', workspace: '/root/.openclaw/workspace-flutter',       systemPromptFile: '/root/.openclaw/prompts/dev-flutter.md',   browser: { enabled: false } },
-  { id: 'marketer',      name: 'Marketer',         model: 'claude-sonnet-4-6', workspace: '/root/.openclaw/workspace-marketing',     systemPromptFile: '/root/.openclaw/prompts/marketer.md',      browser: { enabled: true  } },
-  { id: 'sysadmin',      name: 'Sysadmin',         model: 'claude-sonnet-4-6', workspace: '/root/.openclaw/workspace-sysadmin',      systemPromptFile: '/root/.openclaw/prompts/sysadmin.md',      browser: { enabled: false } }
+  { id: 'orchestrator',  name: 'Orchestrator',   model: 'claude-opus-4-6',  default: true,
+    workspace: '/root/.openclaw/workspace-orchestrator' },
+  { id: 'strategist',    name: 'Strategist',      model: 'claude-sonnet-4-6',
+    workspace: '/root/.openclaw/workspace-strategist' },
+  { id: 'ux-researcher', name: 'UX Researcher',   model: 'claude-sonnet-4-6',
+    workspace: '/root/.openclaw/workspace-ux' },
+  { id: 'product',       name: 'Product Manager', model: 'claude-opus-4-6',
+    workspace: '/root/.openclaw/workspace-product' },
+  { id: 'dev-python',    name: 'Dev Backend',     model: 'claude-sonnet-4-6',
+    workspace: '/root/.openclaw/workspace-python' },
+  { id: 'dev-flutter',   name: 'Dev Mobile',      model: 'claude-sonnet-4-6',
+    workspace: '/root/.openclaw/workspace-flutter' },
+  { id: 'marketer',      name: 'Marketer',        model: 'claude-sonnet-4-6',
+    workspace: '/root/.openclaw/workspace-marketing' },
+  { id: 'sysadmin',      name: 'Sysadmin',        model: 'claude-sonnet-4-6',
+    workspace: '/root/.openclaw/workspace-sysadmin' }
 ];
 
-// Bindings
+// Bindings — slackChannel rejeté par cette version, on bind par channel uniquement
+// La distinction par channel Slack se configure via `openclaw onboard` après installation
 cfg.bindings = [
-  { agentId: 'orchestrator',  match: { channel: 'telegram' } },
-  { agentId: 'orchestrator',  match: { channel: 'slack', slackChannel: '#general' } },
-  { agentId: 'strategist',    match: { channel: 'slack', slackChannel: '#strategist-veille' } },
-  { agentId: 'ux-researcher', match: { channel: 'slack', slackChannel: '#ux-research' } },
-  { agentId: 'product',       match: { channel: 'slack', slackChannel: '#product-backlog' } },
-  { agentId: 'dev-python',    match: { channel: 'slack', slackChannel: '#dev-backend' } },
-  { agentId: 'dev-flutter',   match: { channel: 'slack', slackChannel: '#dev-mobile' } },
-  { agentId: 'marketer',      match: { channel: 'slack', slackChannel: '#marketing' } },
-  { agentId: 'sysadmin',      match: { channel: 'slack', slackChannel: '#sysadmin-ops' } }
+  { agentId: 'orchestrator', match: { channel: 'telegram' } },
+  { agentId: 'orchestrator', match: { channel: 'slack' } }
 ];
 
-// Browser (Playwright dans LXC sans sandbox)
-cfg.browser = {
-  chromiumFlags: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-};
+fs.writeFileSync(p, JSON.stringify(cfg, null, 2));
+console.log('  ✅ openclaw.json fusionné avec succès');
+NODEJS
 
-// Sécurité
-cfg.security = { dmPolicy: 'pairing' };
-
-// Workspace partagé
-cfg.sharedWorkspace = '/root/.openclaw/workspace-shared';
-
-// gateway.bind — s'assurer qu'il est bien présent (au cas où openclaw.sh ne l'a pas injecté)
-if (!cfg.gateway) cfg.gateway = {};
-if (!cfg.gateway.mode) cfg.gateway.mode = 'local';
-
-fs.writeFileSync('$OPENCLAW_JSON', JSON.stringify(cfg, null, 2));
-console.log('✅ openclaw.json fusionné avec succès');
-"
-
-# ── 4. Initialiser les fichiers partagés ──────────────────────────────────────
+# ── 5. Workspace partagé ──────────────────────────────────────────────────────
 echo "📋 Initialisation du workspace partagé..."
 
 if [ ! -f "$SHARED_DIR/changelog.md" ]; then
-cat > "$SHARED_DIR/changelog.md" << 'EOF'
+  cat > "$SHARED_DIR/changelog.md" << 'EOF'
 # Changelog — Workspace Partagé
 
 Format : [YYYY-MM-DD HH:MM] agent — action effectuée
@@ -121,7 +127,7 @@ EOF
 fi
 
 if [ ! -f "$SHARED_DIR/decisions.md" ]; then
-cat > "$SHARED_DIR/decisions.md" << 'EOF'
+  cat > "$SHARED_DIR/decisions.md" << 'EOF'
 # Décisions Produit
 
 | Date | Décision | Raison | Auteur |
@@ -130,30 +136,40 @@ EOF
   echo "  ✅ decisions.md initialisé"
 fi
 
-# ── 5. Vérification finale ─────────────────────────────────────────────────────
+# ── 6. Redémarrage ───────────────────────────────────────────────────────────
 echo ""
-echo "✅ Installation terminée !"
+echo "🔄 Redémarrage OpenClaw..."
+systemctl restart openclaw-gateway
+sleep 3
+systemctl is-active openclaw-gateway \
+  && echo "  ✅ OpenClaw Gateway actif" \
+  || echo "  ⚠️  Service non actif — vérifier : journalctl -u openclaw-gateway -n 20"
+
+# ── 7. Résumé ─────────────────────────────────────────────────────────────────
+IP=$(hostname -I | awk '{print $1}')
+
 echo ""
-echo "Structure créée :"
-find "$OPENCLAW_DIR" -maxdepth 2 -type d | sort
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  ✅ Agents installés !"
 echo ""
-echo "Agents configurés dans openclaw.json :"
+echo "  Agents configurés :"
 node -e "
-  const cfg = JSON.parse(require('fs').readFileSync('$OPENCLAW_JSON', 'utf8'));
-  (cfg.agents?.list || []).forEach(a => console.log('  ✅', a.id, '—', a.model));
+  const cfg = JSON.parse(require('fs').readFileSync('/root/.openclaw/openclaw.json','utf8'));
+  (cfg.agents.list || []).forEach(a => console.log('    ✅', a.id, '—', a.model));
 "
 echo ""
-echo "📌 Channels Slack à créer dans ton workspace :"
-echo "   #general            → orchestrator"
-echo "   #strategist-veille  → strategist"
-echo "   #ux-research        → ux-researcher"
-echo "   #product-backlog    → product"
-echo "   #dev-backend        → dev-python"
-echo "   #dev-mobile         → dev-flutter"
-echo "   #marketing          → marketer"
-echo "   #sysadmin-ops       → sysadmin"
+echo "  📣 Channels Slack à créer :"
+echo "     #general            → orchestrator"
+echo "     #strategist-veille  → strategist"
+echo "     #ux-research        → ux-researcher"
+echo "     #product-backlog    → product"
+echo "     #dev-backend        → dev-python"
+echo "     #dev-mobile         → dev-flutter"
+echo "     #marketing          → marketer"
+echo "     #sysadmin-ops       → sysadmin"
 echo ""
-echo "📌 Redémarre OpenClaw pour charger la config :"
-echo "   sudo systemctl restart openclaw-gateway"
-echo ""
-echo "📌 Dashboard : http://$(hostname -I | awk '{print $1}'):18789"
+echo "  🔒 Dashboard via tunnel SSH (Windows PowerShell) :"
+echo "     ssh -L 18789:127.0.0.1:18789 root@${IP} -N"
+echo "     Puis : http://127.0.0.1:18789"
+echo "     Mot de passe dashboard : ${DASHBOARD_PASSWORD}"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
