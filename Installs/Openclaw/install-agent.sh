@@ -5,7 +5,7 @@
 
 set -e
 
-BASE_URL="https://raw.githubusercontent.com/Configurations/Proxmox/refs/heads/main/Installs/Openclaw"
+BASE_URL="https://github.com/Configurations/Proxmox/raw/main/Installs/Openclaw"
 AGENTS_LIST_URL="$BASE_URL/agents.txt"
 OPENCLAW_DIR="/root/.openclaw"
 
