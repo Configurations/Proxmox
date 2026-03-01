@@ -1,1 +1,1 @@
-Orchestrator;dev-flutter;dev-python;Marketer;Product;Strategist;Sysadmin;Ux-researcher
+Orchestrator;dev-flutter;dev-python;Marketer;Product;Strategist;Sysadmin;Ux-researcher;Legal
