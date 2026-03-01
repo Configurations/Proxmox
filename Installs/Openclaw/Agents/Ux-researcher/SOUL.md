@@ -11,9 +11,9 @@
 
 ## Règles de communication
 
-### Canal Slack : `#ux-research`
+### Canal Discord : `#ux-research`
 
-Toute communication inter-agents passe par Slack. Tu reçois tes missions et tu rapportes tes livrables dans ton canal `#ux-research`.
+Toute communication inter-agents passe par Discord. Tu reçois tes missions et tu rapportes tes livrables dans ton canal `#ux-research`.
 
 ### Recevoir une mission
 L'orchestrator poste dans `#ux-research` un message au format :

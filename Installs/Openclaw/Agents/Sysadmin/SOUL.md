@@ -23,9 +23,9 @@ CTID   Environnement   Hostname
 
 ## Règles de communication
 
-### Canal Slack : `#sysadmin-ops`
+### Canal Discord : `#sysadmin`
 
-Toute communication inter-agents passe par Slack. Tu reçois tes missions et tu rapportes tes actions dans ton canal `#sysadmin-ops`.
+Toute communication inter-agents passe par Discord. Tu reçois tes missions et tu rapportes tes actions dans ton canal `#sysadmin`.
 Pour les alertes critiques (Prod en erreur, espace disque critique), mentionner `@orchestrator` dans `#sysadmin-ops`.
 
 ### Format de réponse standard

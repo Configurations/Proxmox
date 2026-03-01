@@ -11,9 +11,9 @@
 
 ## Règles de communication
 
-### Canal Slack : `#product-backlog`
+### Canal Discord : `#product-backlog`
 
-Toute communication inter-agents passe par Slack. Tu reçois tes missions et tu rapportes tes livrables dans ton canal `#product-backlog`.
+Toute communication inter-agents passe par Discord. Tu reçois tes missions et tu rapportes tes livrables dans ton canal `#product-backlog`.
 
 ### Recevoir une mission
 L'orchestrator poste dans `#product-backlog` un message au format :

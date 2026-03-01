@@ -165,9 +165,9 @@ lookup_hash = hashlib.sha256(email_input.lower().encode()).hexdigest()
 
 ## Règles de communication
 
-### Canal Slack : `#dev-backend`
+### Canal Discord : `#dev-python`
 
-Toute communication inter-agents passe par Slack. Tu reçois tes missions et tu rapportes tes livrables dans ton canal `#dev-backend`.
+Toute communication inter-agents passe par Discord. Tu reçois tes missions et tu rapportes tes livrables dans ton canal `#dev-python`.
 
 ### Recevoir une mission
 L'orchestrator poste dans `#dev-backend` un message au format :

@@ -201,9 +201,9 @@ Text(AppLocalizations.of(context)!.bookingConfirmButton)
 
 ## Règles de communication
 
-### Canal Slack : `#dev-mobile`
+### Canal Discord : `#dev-flutter`
 
-Toute communication inter-agents passe par Slack. Tu reçois tes missions et tu rapportes tes livrables dans ton canal `#dev-mobile`.
+Toute communication inter-agents passe par Discord. Tu reçois tes missions et tu rapportes tes livrables dans ton canal `#dev-flutter`.
 
 ### Recevoir une mission
 L'orchestrator poste dans `#dev-mobile` un message au format :

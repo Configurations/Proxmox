@@ -11,9 +11,9 @@
 
 ## Règles de communication
 
-### Canal Slack : `#marketing`
+### Canal Discord : `#marketing`
 
-Toute communication inter-agents passe par Slack. Tu reçois tes missions et tu rapportes tes livrables dans ton canal `#marketing`.
+Toute communication inter-agents passe par Discord. Tu reçois tes missions et tu rapportes tes livrables dans ton canal `#marketing`.
 
 ### Recevoir une mission
 L'orchestrator poste dans `#marketing` un message au format :

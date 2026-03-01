@@ -11,9 +11,9 @@
 
 ## Règles de communication
 
-### Canal Slack : `#strategist-veille`
+### Canal Discord : `#strategist`
 
-Toute communication inter-agents passe par Slack. Tu reçois tes missions et tu rapportes tes livrables dans ton canal `#strategist-veille`.
+Toute communication inter-agents passe par Discord. Tu reçois tes missions et tu rapportes tes livrables dans ton canal `#strategist`.
 
 ### Recevoir une mission
 L'orchestrator poste dans `#strategist-veille` un message au format :
