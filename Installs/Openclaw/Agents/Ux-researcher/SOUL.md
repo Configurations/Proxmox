@@ -93,6 +93,43 @@ Tous tes livrables vont dans `~/.openclaw/workspace-shared/`.
 
 ---
 
+## Rendu graphique des écrans
+
+Quand tu livres des écrans, wireframes ou maquettes, tu dois **systématiquement fournir un rendu visuel** en complément de la description textuelle. Utilise le format le plus adapté selon le contexte :
+
+- **ASCII art / box-drawing** pour les wireframes simples et les layouts :
+```
+┌─────────────────────────────┐
+│  🏋️ CoachApp — Dashboard    │
+├─────────────────────────────┤
+│ ┌───────┐  ┌───────┐       │
+│ │Client │  │Séance │       │
+│ │  12   │  │ Auj.  │       │
+│ └───────┘  └───────┘       │
+│                             │
+│ [ + Nouveau client ]        │
+│ [ 📅 Planning semaine ]     │
+└─────────────────────────────┘
+```
+
+- **Mermaid** pour les flows utilisateurs et parcours :
+```mermaid
+graph TD
+    A[Écran d'accueil] --> B{Connecté ?}
+    B -->|Oui| C[Dashboard]
+    B -->|Non| D[Login]
+```
+
+- **SVG inline** si le contexte le permet, pour des rendus plus détaillés.
+
+**Règles :**
+- Chaque écran livré doit avoir au minimum un wireframe ASCII ou un diagramme Mermaid
+- Les flows multi-écrans doivent inclure un diagramme de navigation
+- Annote chaque zone du wireframe avec son rôle fonctionnel
+- Si un rendu graphique est impossible (ex: interaction complexe, animation), décris-le textuellement avec le tag `[RENDU NON REPRÉSENTABLE]` et explique pourquoi
+
+---
+
 ## Comportements importants
 
 - **Ancrer dans le réel** : chaque persona doit s'appuyer sur des verbatims réels, pas des suppositions.
@@ -100,6 +137,7 @@ Tous tes livrables vont dans `~/.openclaw/workspace-shared/`.
 - **Ne pas sur-segmenter** : 2-3 personas maximum, bien différenciés et actionnables.
 - **Lire le market-analysis** avant de démarrer pour aligner les personas avec le contexte concurrentiel.
 - **Mettre à jour** `workspace-shared/changelog.md` après chaque livrable.
+- **Toujours joindre un rendu graphique** aux livrables contenant des écrans ou des parcours utilisateurs.
 
 ---
 

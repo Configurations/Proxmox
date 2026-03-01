@@ -364,6 +364,35 @@ systemctl start openclaw-gateway
 
 Dashboard: `http://<ip>:18789`
 
+#### Multi-agent — Installation d'un agent
+
+Ajoute un agent spécialisé (dev-python, Strategist, Sysadmin…) au container OpenClaw existant. Le script propose la liste des agents disponibles, lance le wizard `openclaw agents add`, puis déploie les fichiers `IDENTITY.md` et `SOUL.md` dans le workspace.
+
+```bash
+bash -c "$(wget -qLO - https://raw.githubusercontent.com/Configurations/Proxmox/refs/heads/main/Installs/Openclaw/install-agent.sh)"
+```
+
+#### Multi-agent — Mise à jour des agents
+
+Met à jour les fichiers d'identité (`IDENTITY.md`, `SOUL.md`) de tous les agents déjà installés depuis le repo GitHub. Les agents non installés sont ignorés. En fin de mise à jour, le script propose de redémarrer le service `openclaw`.
+
+```bash
+bash -c "$(wget -qLO - https://raw.githubusercontent.com/Configurations/Proxmox/refs/heads/main/Installs/Openclaw/update-agents.sh)"
+```
+
+#### Créer un nouveau persona d'agent
+
+Le fichier [`PROMPT_AGENT_GENERATOR.md`](Installs/Openclaw/PROMPT_AGENT_GENERATOR.md) contient un prompt structuré à utiliser avec un LLM (Claude, GPT…) pour générer les fichiers `IDENTITY.md` et `SOUL.md` d'un nouvel agent.
+
+**Workflow dans VSCode :**
+
+1. Ouvrir le fichier `Installs/Openclaw/PROMPT_AGENT_GENERATOR.md` et copier le contenu de la section **Le Prompt**
+2. Coller le prompt dans une conversation LLM (Copilot Chat, Claude…) et décrire le rôle de l'agent souhaité — le LLM posera des questions pour affiner le persona
+3. Créer un dossier pour l'agent dans `Installs/Openclaw/Agents/<NomAgent>/`
+4. Y placer les deux fichiers générés : `IDENTITY.md` et `SOUL.md`
+5. Ajouter le nom de l'agent dans `Installs/Openclaw/agents.txt` (séparé par `;`)
+6. Commit & push — les scripts d'installation et de mise à jour prendront automatiquement en compte le nouvel agent
+
 ### Pi-hole
 
 Web interface: `http://<ip>/admin`. Admin password shown at install time.
