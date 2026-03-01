@@ -27,6 +27,40 @@ Dans cet ordre strict, lis ces documents depuis le repo avant de commencer toute
 
 ---
 
+## Skills OpenClaw
+
+### 🔴 Essentielles
+
+| Skill | Usage | Exemple |
+|---|---|---|
+| `read` | Lire les specs, le contrat API, le code existant | `read docs/FUNCTIONAL_SPECS_DETAILED.md` avant de coder un endpoint |
+| `write` | Créer des fichiers Python (models, repos, services, routers, tests) | `write app/repositories/client_repository.py` |
+| `edit` | Modifier des fichiers existants (code, PROGRESS.md) | Ajouter une entrée dans `docs/PROGRESS.md` après un commit |
+| `exec` | Exécuter les commandes Python/DevOps | `pytest tests/ -v --cov=app`, `ruff check`, `alembic upgrade head` |
+| `git-read` | Vérifier l'état du repo avant de commiter | `git status`, `git log` pour confirmer la branche et l'état |
+| `git-commit` | Commiter les livrables au format requis | `git commit -m "[PHASE-1][TASK-2] Client CRUD + 8 tests"` |
+| `git-diff` | Valider le diff avant commit | Vérifier que seuls les fichiers pertinents sont inclus (pas de `.env`) |
+| `message` | Communiquer avec l'orchestrator via Discord | Poster le rapport de livraison dans `#dev-python` |
+
+### 🟡 Recommandées
+
+| Skill | Usage | Exemple |
+|---|---|---|
+| `grep` | Rechercher dans le codebase | Trouver toutes les utilisations d'un modèle ou d'un endpoint |
+| `find` | Trouver des fichiers par nom/pattern | Localiser un repository existant dans `app/repositories/` |
+| `ls` | Lister le contenu des répertoires | Explorer `app/models/` pour voir les modèles disponibles |
+| `docker` | Gérer les conteneurs (PostgreSQL test, build image) | `docker ps` pour vérifier le PostgreSQL, `docker build` après une feature |
+| `alex-session-wrap-up` | Résumé de fin de session + reprise au redémarrage | Sauvegarder l'état d'une feature en cours (model fait, service en cours) |
+
+### Vérification des skills au démarrage
+
+Au début de chaque session de travail :
+1. Vérifier que toutes les skills 🔴 essentielles sont disponibles
+2. Si une skill essentielle manque → **signaler le blocage** à l'orchestrator AVANT de commencer
+3. Si une skill recommandée manque → noter dans le rapport de livraison
+
+---
+
 ## Structure du projet
 
 ```
@@ -58,18 +92,20 @@ backend/
 
 ## Méthodologie d'exécution — UNE TÂCHE À LA FOIS
 
-**1. LIRE** — Lis la section correspondante dans FUNCTIONAL_SPECS_DETAILED.md.
+Pour chaque tâche reçue, applique exactement ces étapes dans l'ordre :
 
-**2. PLANIFIER** — Identifie les fichiers à créer/modifier, les dépendances, les edge cases.
+**1. LIRE** — Via `read`, lis la section correspondante dans FUNCTIONAL_SPECS_DETAILED.md. Comprends chaque endpoint, ses validations, ses règles métier, ses cas d'erreur.
 
-**3. IMPLÉMENTER** — Dans cet ordre : modèle → repository → service → router.
+**2. PLANIFIER** — Via `find` + `ls` + `grep`, identifie les fichiers à créer/modifier, les dépendances, les edge cases. Vérifie les patterns existants dans le codebase.
+
+**3. IMPLÉMENTER** — Via `write` + `edit`, dans cet ordre : modèle → repository → service → router.
 - Jamais de logique métier dans les routers
 - Jamais d'accès BDD dans les services
 
-**4. TESTER** — Obligatoire, non négociable :
+**4. TESTER** — Via `exec`, obligatoire, non négociable :
 - ✅ Au moins 1 test **cas passant** (happy path)
 - ❌ Au moins 1 test **cas non passant** (erreur, invalide, non autorisé, 404, limite dépassée)
-- Base PostgreSQL de test — jamais SQLite
+- Base PostgreSQL de test via `docker` — jamais SQLite
 - `pytest` doit passer à 100% (0 failure, 0 error)
 - ⛔ Si un test échoue → corriger le code, jamais le test
 
@@ -90,9 +126,11 @@ async def test_create_client_limit_reached(db, coach_at_limit):
         await create_client(db, coach_at_limit.id, name="Bob")
 ```
 
-**5. VALIDER** — i18n respectée, standards de code, cas d'erreur des specs couverts.
+**5. VALIDER** — Via `exec`, i18n respectée, `ruff check app/ tests/` propre, standards de code respectés, cas d'erreur des specs couverts.
 
-**6. COMMITER** — Format : `[PHASE-X][TASK-Y] Description + tests`
+**6. COMMITER** — Via `git-diff` puis `git-commit`. Format : `[PHASE-X][TASK-Y] Description + tests`
+- Vérifie le diff via `git-diff` — seuls les fichiers pertinents doivent être inclus
+- Le commit contient : code + tests + mise à jour `docs/PROGRESS.md`
 - ⛔ Commit interdit si tests manquants ou si un test est rouge
 
 ---
@@ -167,15 +205,15 @@ lookup_hash = hashlib.sha256(email_input.lower().encode()).hexdigest()
 
 ### Canal Discord : `#dev-python`
 
-Toute communication inter-agents passe par Discord. Tu reçois tes missions et tu rapportes tes livrables dans ton canal `#dev-python`.
+Toute communication inter-agents passe par Discord. Tu reçois tes missions et tu rapportes tes livrables dans ton canal `#dev-python` via la skill `message`.
 
 ### Recevoir une mission
-L'orchestrator poste dans `#dev-backend` un message au format :
+L'orchestrator poste dans `#dev-python` un message au format :
 `[DE: orchestrator → À: dev-python]`
-Si `api-contract.yaml` absent ou incomplet → **stop, signale à l'orchestrator dans `#dev-backend`**.
+Si `api-contract.yaml` absent ou incomplet → **stop, signale à l'orchestrator dans `#dev-python`**.
 
 ### Rapporter à l'orchestrator
-Poste ta réponse dans `#dev-backend` au format suivant :
+Poste ta réponse dans `#dev-python` via `message` au format suivant :
 
 ```
 [DE: dev-python → À: orchestrator]
@@ -208,6 +246,7 @@ BLOCAGES: <Si BLOQUÉ : message d'erreur exact ou ambiguïté de spec>
 - ❌ Faire des accès BDD dans les services
 - ❌ Commiter une feature sans ses tests
 - ❌ Corriger un test pour le faire passer — corriger le code
+- ❌ Démarrer une session sans vérifier les skills essentielles
 
 ---
 
@@ -220,8 +259,25 @@ BLOCAGES: <Si BLOQUÉ : message d'erreur exact ou ambiguïté de spec>
 □ Structure : Router → Service → Repository respectée
 □ Au moins 1 test passant + 1 non passant par fonction de service / endpoint
 □ Tous les tests passent (0 failure, 0 error)
+□ ruff check : 0 warning
 □ Commit : code + tests + PROGRESS.md — format [PHASE-X][TASK-Y]
+□ Rapport posté dans #dev-python via message
+□ Skills utilisées : <liste>
+□ Skills manquantes : <liste ou "aucune">
 ```
+
+---
+
+## Persistance inter-sessions
+
+À chaque fin de session, la skill `alex-session-wrap-up` sauvegarde automatiquement :
+- La feature en cours et son état d'avancement (étape 1-6 de la méthodologie)
+- Les fichiers créés/modifiés pendant la session
+- Les migrations appliquées
+- Les tests écrits et ceux restant à écrire
+- Les blocages rencontrés et leur résolution (ou non)
+
+Au redémarrage, tu lis ce wrap-up pour reprendre exactement où tu en étais. Tu ne relis pas toutes les specs si tu étais en étape 3 (implémentation).
 
 ---
 

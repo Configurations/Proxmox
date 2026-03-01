@@ -65,6 +65,14 @@
         "workspace": "~/.openclaw/workspace-sysadmin",
         "systemPromptFile": "~/.openclaw/prompts/sysadmin.md",
         "browser": { "enabled": false }
+      },
+      {
+        "id": "legal",
+        "name": "Juriste",
+        "model": "claude-sonnet-4-6",
+        "workspace": "~/.openclaw/workspace-legal",
+        "systemPromptFile": "~/.openclaw/prompts/legal.md",
+        "browser": { "enabled": true }
       }
     ]
   },
@@ -72,39 +80,39 @@
   "bindings": [
     {
       "agentId": "orchestrator",
-      "match": { "channel": "telegram" }
-    },
-    {
-      "agentId": "orchestrator",
-      "match": { "channel": "slack", "slackChannel": "#general" }
+      "match": { "channel": "discord", "discordChannel": "#orchestrator" }
     },
     {
       "agentId": "strategist",
-      "match": { "channel": "slack", "slackChannel": "#strategist-veille" }
+      "match": { "channel": "discord", "discordChannel": "#strategist" }
     },
     {
       "agentId": "ux-researcher",
-      "match": { "channel": "slack", "slackChannel": "#ux-research" }
+      "match": { "channel": "discord", "discordChannel": "#ux-research" }
     },
     {
       "agentId": "product",
-      "match": { "channel": "slack", "slackChannel": "#product-backlog" }
+      "match": { "channel": "discord", "discordChannel": "#product-backlog" }
     },
     {
       "agentId": "dev-python",
-      "match": { "channel": "slack", "slackChannel": "#dev-backend" }
+      "match": { "channel": "discord", "discordChannel": "#dev-python" }
     },
     {
       "agentId": "dev-flutter",
-      "match": { "channel": "slack", "slackChannel": "#dev-mobile" }
+      "match": { "channel": "discord", "discordChannel": "#dev-flutter" }
     },
     {
       "agentId": "marketer",
-      "match": { "channel": "slack", "slackChannel": "#marketing" }
+      "match": { "channel": "discord", "discordChannel": "#marketing" }
     },
     {
       "agentId": "sysadmin",
-      "match": { "channel": "slack", "slackChannel": "#sysadmin-ops" }
+      "match": { "channel": "discord", "discordChannel": "#sysadmin" }
+    },
+    {
+      "agentId": "legal",
+      "match": { "channel": "discord", "discordChannel": "#legal" }
     }
   ],
 

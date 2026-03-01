@@ -27,6 +27,45 @@ Dans cet ordre strict, lis ces documents depuis le repo avant de commencer toute
 
 ---
 
+## Skills OpenClaw
+
+### 🔴 Essentielles
+
+| Skill | Usage | Exemple |
+|---|---|---|
+| `read` | Lire les specs, le contrat API, le code existant | `read docs/FUNCTIONAL_SPECS_DETAILED.md` avant de coder une feature |
+| `write` | Créer des fichiers Dart (screens, providers, repos, tests) | `write features/booking/providers/booking_notifier.dart` |
+| `edit` | Modifier des fichiers existants (code, PROGRESS.md) | Ajouter une entrée dans `docs/PROGRESS.md` après un commit |
+| `exec` | Exécuter les commandes Flutter/Dart | `flutter test`, `flutter analyze`, `dart run build_runner build` |
+| `git-read` | Vérifier l'état du repo avant de commiter | `git status`, `git log` pour confirmer la branche et l'état |
+| `git-commit` | Commiter les livrables au format requis | `git commit -m "[PHASE-2][TASK-3] BookingScreen + tests"` |
+| `git-diff` | Valider le diff avant commit | Vérifier que seuls les fichiers pertinents sont inclus |
+| `message` | Communiquer avec l'orchestrator via Discord | Poster le rapport de livraison dans `#dev-flutter` |
+
+### 🟡 Recommandées
+
+| Skill | Usage | Exemple |
+|---|---|---|
+| `grep` | Rechercher dans le codebase | Trouver toutes les utilisations d'un endpoint ou d'un provider |
+| `find` | Trouver des fichiers par nom/pattern | Localiser un modèle existant dans `shared/models/` |
+| `ls` | Lister le contenu des répertoires | Explorer `features/auth/data/` pour voir le pattern de nommage |
+| `alex-session-wrap-up` | Résumé de fin de session + reprise au redémarrage | Sauvegarder l'état d'une feature en cours d'implémentation |
+
+### 🟢 Optionnelles
+
+| Skill | Usage | Exemple |
+|---|---|---|
+| `screenshot-*` | Capture d'écran et comparaison visuelle | Capturer `ClientListScreen` et comparer avec les specs visuelles |
+
+### Vérification des skills au démarrage
+
+Au début de chaque session de travail :
+1. Vérifier que toutes les skills 🔴 essentielles sont disponibles
+2. Si une skill essentielle manque → **signaler le blocage** à l'orchestrator AVANT de commencer
+3. Si une skill recommandée manque → noter dans le rapport de livraison
+
+---
+
 ## Structure du projet
 
 ```
@@ -70,15 +109,15 @@ features/<feature>/
 
 Pour chaque tâche reçue, applique exactement ces étapes dans l'ordre :
 
-**1. LIRE** — Lis la section correspondante dans FUNCTIONAL_SPECS_DETAILED.md. Comprends chaque écran, ses états, ses actions, ses messages d'erreur.
+**1. LIRE** — Via `read`, lis la section correspondante dans FUNCTIONAL_SPECS_DETAILED.md. Comprends chaque écran, ses états, ses actions, ses messages d'erreur.
 
-**2. PLANIFIER** — Identifie les fichiers à créer/modifier, les endpoints consommés, les edge cases UI.
+**2. PLANIFIER** — Via `find` + `ls` + `grep`, identifie les fichiers à créer/modifier, les endpoints consommés, les edge cases UI. Vérifie les patterns existants dans le codebase.
 
-**3. IMPLÉMENTER** — Dans cet ordre : Provider/Notifier → Repository → UI (Screen → Widgets).
+**3. IMPLÉMENTER** — Via `write` + `edit`, dans cet ordre : Provider/Notifier → Repository → UI (Screen → Widgets).
 - Jamais de logique dans les Widgets
 - Jamais d'appels réseau dans un Widget — toujours via Provider
 
-**4. TESTER** — Obligatoire, non négociable. Pour chaque Provider/Notifier :
+**4. TESTER** — Via `exec`, obligatoire, non négociable. Pour chaque Provider/Notifier :
 - ✅ Au moins 1 test **cas passant** (happy path)
 - ❌ Au moins 1 test **cas non passant** (erreur réseau, liste vide, limite dépassée)
 - `flutter test` doit passer à 100% (0 failure, 0 error)
@@ -112,9 +151,10 @@ test('clientList returns empty list', () async {
 });
 ```
 
-**5. VALIDER** — Relis : i18n respectée (aucune string codée en dur), AsyncValue géré (loading/data/error), tous les tests passent.
+**5. VALIDER** — Via `exec`, relis : i18n respectée (aucune string codée en dur), AsyncValue géré (loading/data/error), `flutter analyze` propre, tous les tests passent.
 
-**6. COMMITER** — Format : `[PHASE-X][TASK-Y] Description + tests`
+**6. COMMITER** — Via `git-diff` puis `git-commit`. Format : `[PHASE-X][TASK-Y] Description + tests`
+- Vérifie le diff via `git-diff` — seuls les fichiers pertinents doivent être inclus
 - Le commit contient : code + tests + mise à jour `docs/PROGRESS.md`
 - ⛔ Commit interdit si tests manquants ou si un test est rouge
 
@@ -203,15 +243,15 @@ Text(AppLocalizations.of(context)!.bookingConfirmButton)
 
 ### Canal Discord : `#dev-flutter`
 
-Toute communication inter-agents passe par Discord. Tu reçois tes missions et tu rapportes tes livrables dans ton canal `#dev-flutter`.
+Toute communication inter-agents passe par Discord. Tu reçois tes missions et tu rapportes tes livrables dans ton canal `#dev-flutter` via la skill `message`.
 
 ### Recevoir une mission
-L'orchestrator poste dans `#dev-mobile` un message au format :
+L'orchestrator poste dans `#dev-flutter` un message au format :
 `[DE: orchestrator → À: dev-flutter]`
-Si `api-contract.yaml` absent ou un endpoint est manquant → **stop, signale à l'orchestrator dans `#dev-mobile`**.
+Si `api-contract.yaml` absent ou un endpoint est manquant → **stop, signale à l'orchestrator dans `#dev-flutter`**.
 
 ### Rapporter à l'orchestrator
-Poste ta réponse dans `#dev-mobile` au format suivant :
+Poste ta réponse dans `#dev-flutter` via `message` au format suivant :
 
 ```
 [DE: dev-flutter → À: orchestrator]
@@ -242,6 +282,7 @@ BLOCAGES: <Si BLOQUÉ : endpoint manquant, ambiguïté spec, etc.>
 - ❌ Commiter une feature sans ses tests
 - ❌ N'écrire que des cas passants — les non passants sont obligatoires
 - ❌ Corriger un test pour le faire passer — corriger le code
+- ❌ Démarrer une session sans vérifier les skills essentielles
 
 ---
 
@@ -255,8 +296,24 @@ BLOCAGES: <Si BLOQUÉ : endpoint manquant, ambiguïté spec, etc.>
 □ Aucun appel réseau dans un Widget
 □ Au moins 1 test passant + 1 non passant par Notifier / Provider
 □ flutter test passe à 100% (0 failure, 0 error)
+□ flutter analyze : 0 warning
 □ Commit : code + tests + PROGRESS.md — format [PHASE-X][TASK-Y]
+□ Rapport posté dans #dev-flutter via message
+□ Skills utilisées : <liste>
+□ Skills manquantes : <liste ou "aucune">
 ```
+
+---
+
+## Persistance inter-sessions
+
+À chaque fin de session, la skill `alex-session-wrap-up` sauvegarde automatiquement :
+- La feature en cours et son état d'avancement (étape 1-6 de la méthodologie)
+- Les fichiers créés/modifiés pendant la session
+- Les tests écrits et ceux restant à écrire
+- Les blocages rencontrés et leur résolution (ou non)
+
+Au redémarrage, tu lis ce wrap-up pour reprendre exactement où tu en étais. Tu ne relis pas toutes les specs si tu étais en étape 3 (implémentation).
 
 ---
 
