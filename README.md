@@ -37,14 +37,14 @@ Supported OS targets: **Debian 11/12**, **Ubuntu 20.04/22.04/24.04**, **Alpine L
 
 | Application | OS | Type | CPU | RAM | Disk | Port(s) |
 |---|---|---|---|---|---|---|
-| **Docker** + Portainer | Debian 12 | Unprivileged | 2 | 2 GB | 4 GB | 9443 (Portainer), 9001 (Agent) |
-| **Gitea** | Debian 12 | Unprivileged | 2 | 1 GB | 8 GB | 3000 |
-| **Keycloak** | Debian 12 | Unprivileged | 2 | 2 GB | 6 GB | 8080 |
-| **Nginx Proxy Manager** | Debian 12 | **Privileged** | 2 | 512 MB | 4 GB | 80, 81 (admin), 443 |
-| **OpenClaw** | Ubuntu 24.04 | **Privileged** | 2 | 4 GB | 10 GB | 18789 |
-| **Pi-hole** | Debian 12 | Unprivileged | 1 | 512 MB | 4 GB | 80, 53 (DNS) |
-| **Uptime Kuma** | Debian 12 | Unprivileged | 1 | 512 MB | 4 GB | 3001 |
-| **Vaultwarden** | Debian 12 | **Privileged** | 1 | 512 MB | 4 GB | 8080 |
+| [**Docker**](#docker) + Portainer | Debian 12 | Unprivileged | 2 | 2 GB | 4 GB | 9443 (Portainer), 9001 (Agent) |
+| [**Gitea**](#gitea) | Debian 12 | Unprivileged | 2 | 1 GB | 8 GB | 3000 |
+| [**Keycloak**](#keycloak) | Debian 12 | Unprivileged | 2 | 2 GB | 6 GB | 8080 |
+| [**Nginx Proxy Manager**](#nginx-proxy-manager) | Debian 12 | **Privileged** | 2 | 512 MB | 4 GB | 80, 81 (admin), 443 |
+| [**OpenClaw**](#openclaw) | Ubuntu 24.04 | **Privileged** | 2 | 4 GB | 10 GB | 18789 |
+| [**Pi-hole**](#pi-hole) | Debian 12 | Unprivileged | 1 | 512 MB | 4 GB | 80, 53 (DNS) |
+| [**Uptime Kuma**](#uptime-kuma) | Debian 12 | Unprivileged | 1 | 512 MB | 4 GB | 3001 |
+| [**Vaultwarden**](#vaultwarden) | Debian 12 | **Privileged** | 1 | 512 MB | 4 GB | 8080 |
 | **Empty** | Debian 12 | Unprivileged | 2 | 2 GB | 4 GB | — |
 
 > Privileged containers are required for Docker-based apps (Vaultwarden, Nginx Proxy Manager) and OpenClaw.
