@@ -19,7 +19,7 @@ doit tourner :
 
 | Cible | Scripts |
 |---|---|
-| Hôte Proxmox (root) | `00-create-lxc.sh`, `00-create-lxc-swarm.sh` |
+| Hôte Proxmox (root) | `00-create-lxc.sh`, `00-create-lxc-swarm.sh`, `02-init-swarm.sh` |
 | À l'intérieur du LXC (root) | `01-install-docker.sh`, `02-install-alloy.sh` |
 | Poste local (via alias SSH `pve`) | `deploy.sh`, `deploy-alloy-all.sh` |
 
@@ -76,12 +76,99 @@ mkdir -p /root/lxc && cd /root/lxc && curl -fsSL -o 00-create-lxc.sh https://raw
 
 ### `00-create-lxc-swarm.sh` *(hôte Proxmox)*
 
-Variante destinée à un nœud Swarm (mêmes paramètres et même
-comportement). One-liner :
+Surensemble de `00-create-lxc.sh` ajoutant :
+
+- **Sélection automatique du storage** (`STORAGE=auto` par défaut) :
+  affiche un dashboard de tous les storages utilisables pour rootfs,
+  sélectionne celui avec le plus d'espace libre, vérifie l'espace dispo
+  **avant** `pct create` et refuse si insuffisant (en suggérant une
+  alternative). Marge de sécurité réglable via `SAFETY_MARGIN_GB=5`.
+- **Check Docker post-install** : échoue clairement si l'install a
+  planté en cours de route (ex. pool saturé).
+- **Option `--swarm`** : prépare le LXC pour être un nœud Docker Swarm
+  - charge les modules kernel `ip_vs` / `overlay` sur l'hôte (idempotent)
+  - ajoute `/dev/net/tun` au container (nécessaire pour VXLAN)
+  - configure les sysctl réseau dans le container
+  - tag le container `swarm-ready`
+
+L'init Swarm lui-même (`docker swarm init`) se fait via le script
+séparé `02-init-swarm.sh` (voir ci-dessous).
+
+**Usage** : `./00-create-lxc-swarm.sh <CTID> [hostname] [--swarm]`
+
+**Variables surchargeables** (en plus de celles de `00-create-lxc.sh`) :
+`STORAGE=auto` (défaut, vs. `local-lvm` pour `00-create-lxc.sh`),
+`SAFETY_MARGIN_GB=5`.
+
+**One-liner — nœud Docker simple** :
 
 ```bash
 mkdir -p /root/lxc && cd /root/lxc && curl -fsSL -o 00-create-lxc-swarm.sh https://raw.githubusercontent.com/Configurations/Proxmox/main/LXC/00-create-lxc-swarm.sh && curl -fsSL -o 01-install-docker.sh https://raw.githubusercontent.com/Configurations/Proxmox/main/LXC/01-install-docker.sh && chmod +x *.sh && ./00-create-lxc-swarm.sh <CTID> <hostname>
 ```
+
+**One-liner — nœud Swarm** (forçant éventuellement un storage) :
+
+```bash
+mkdir -p /root/lxc && cd /root/lxc && curl -fsSL -o 00-create-lxc-swarm.sh https://raw.githubusercontent.com/Configurations/Proxmox/main/LXC/00-create-lxc-swarm.sh && curl -fsSL -o 01-install-docker.sh https://raw.githubusercontent.com/Configurations/Proxmox/main/LXC/01-install-docker.sh && chmod +x *.sh && STORAGE=extended-lvm DISK_SIZE=50 ./00-create-lxc-swarm.sh 201 agflow-swarm-mgr --swarm
+```
+
+### `02-init-swarm.sh` *(hôte Proxmox)*
+
+Initialise le **premier manager** Docker Swarm sur un LXC `swarm-ready`
+(créé via `00-create-lxc-swarm.sh ... --swarm`). Idempotent — refuse si
+Swarm est déjà actif sauf `FORCE=1` (destructif).
+
+Étapes :
+
+1. **Pre-checks** — LXC existe, running, tag `swarm-ready`,
+   `/dev/net/tun` présent, Docker opérationnel, Swarm pas déjà actif.
+2. **Détection IP advertise** — auto via `eth0` du LXC (override avec
+   `ADVERTISE_ADDR`), ping de validation depuis l'hôte.
+3. **Vérification du pool overlay** — alerte si chevauchement avec le
+   subnet du LXC (demande confirmation interactive).
+4. **`docker swarm init`** — `--advertise-addr`, `--listen-addr :2377`,
+   `--default-addr-pool` (défaut `10.20.0.0/16` mask /24, choisi pour
+   éviter les conflits avec LAN 192.168/10.x et avec le pool Docker
+   bridge `172.20.0.0/16` du `01-install-docker.sh`).
+5. **Récupération des tokens** worker + manager → sauvegarde JSON dans
+   `/root/.ssh/lxc-keys/swarm-tokens-<CTID>.json` (chmod 600).
+6. **Labels du node** — défaut `role=control,tenant=agflow`.
+
+Sortie finale en JSON (CTID, IP manager, port 2377, hostname, pool,
+labels, chemin du fichier tokens) + commandes `docker swarm join` à
+copier pour ajouter workers/managers.
+
+**Usage** : `./02-init-swarm.sh <CTID>`
+
+**Variables surchargeables** :
+
+| Var | Défaut | Rôle |
+|---|---|---|
+| `ADVERTISE_ADDR` | auto (eth0 du LXC) | force l'IP advertise du manager |
+| `POOL_OVERLAY` | `10.20.0.0/16` | pool d'IPs pour les overlay networks |
+| `POOL_MASK` | `24` | taille des sous-réseaux découpés dans le pool |
+| `NODE_LABELS` | `role=control,tenant=agflow` | labels Swarm du node (CSV) |
+| `TOKEN_DIR` | `/root/.ssh/lxc-keys` | où sont sauvés les tokens |
+| `FORCE` | `0` | si `1`, `swarm leave --force` puis re-init (**destructif**) |
+
+**Lancement (one-liner, sur l'hôte Proxmox en root)** — remplacer
+`<CTID>` par le CTID du futur premier manager :
+
+```bash
+mkdir -p /root/lxc && cd /root/lxc && curl -fsSL -o 02-init-swarm.sh https://raw.githubusercontent.com/Configurations/Proxmox/main/LXC/02-init-swarm.sh && chmod +x 02-init-swarm.sh && ./02-init-swarm.sh <CTID>
+```
+
+Avec un pool overlay personnalisé :
+
+```bash
+POOL_OVERLAY=172.30.0.0/16 ./02-init-swarm.sh 300
+```
+
+> ⚠️ Le script référence un futur `03-join-swarm.sh <CTID_worker>
+> <CTID_manager>` pour ajouter automatiquement des workers — il n'est
+> pas encore présent dans ce dossier. En attendant, utiliser la
+> commande `docker swarm join --token ...` affichée par le résumé
+> final (ou lue depuis `swarm-tokens-<CTID>.json`).
 
 ### `01-install-docker.sh` *(dans le LXC, root)*
 
@@ -262,6 +349,8 @@ Variable consommée par `deploy.sh` (`KEYCLOAK_CLIENT_SECRET`).
 
 ## Pipeline complet (cas d'usage)
 
+### Cas A — LXC Docker mono-nœud (stack ag.flow prod)
+
 ```bash
 # 1) Sur l'hôte Proxmox, en root — provisionner LXC + Docker (one-liner) :
 mkdir -p /root/lxc && cd /root/lxc && curl -fsSL -o 00-create-lxc.sh https://raw.githubusercontent.com/Configurations/Proxmox/main/LXC/00-create-lxc.sh && curl -fsSL -o 01-install-docker.sh https://raw.githubusercontent.com/Configurations/Proxmox/main/LXC/01-install-docker.sh && chmod +x *.sh && ./00-create-lxc.sh 203 agflow-prod
@@ -274,15 +363,37 @@ LOKI_URL="http://192.168.10.116:3100/loki/api/v1/push" HOSTNAME="lxc203" bash -c
 ./infra/deploy.sh
 ```
 
+### Cas B — Cluster Docker Swarm (premier manager)
+
+```bash
+# 1) Sur l'hôte Proxmox, en root — provisionner LXC swarm-ready + Docker :
+mkdir -p /root/lxc && cd /root/lxc && curl -fsSL -o 00-create-lxc-swarm.sh https://raw.githubusercontent.com/Configurations/Proxmox/main/LXC/00-create-lxc-swarm.sh && curl -fsSL -o 01-install-docker.sh https://raw.githubusercontent.com/Configurations/Proxmox/main/LXC/01-install-docker.sh && chmod +x *.sh && ./00-create-lxc-swarm.sh 300 agflow-swarm-mgr --swarm
+
+# 2) Toujours sur l'hôte Proxmox — initialiser le premier manager Swarm :
+curl -fsSL -o /root/lxc/02-init-swarm.sh https://raw.githubusercontent.com/Configurations/Proxmox/main/LXC/02-init-swarm.sh && chmod +x /root/lxc/02-init-swarm.sh && /root/lxc/02-init-swarm.sh 300
+
+# 3) Pour ajouter d'autres nodes : créer chaque LXC avec --swarm, puis
+#    récupérer la commande join dans /root/.ssh/lxc-keys/swarm-tokens-300.json
+#    et l'exécuter dans le LXC worker (via pct exec).
+```
+
 ## Variables d'environnement (synthèse)
 
 | Var | Script | Rôle |
 |---|---|---|
-| `CTID` (arg 1) | `00-create-lxc.sh` | ID du container |
-| `CT_NAME` (arg 2) | `00-create-lxc.sh` | hostname (défaut `agflow-docker`) |
-| `CORES`, `MEMORY`, `SWAP`, `DISK_SIZE` | `00-create-lxc.sh` | ressources |
-| `STORAGE`, `BRIDGE` | `00-create-lxc.sh` | défaut `local-lvm`, `vmbr0` |
-| `SSH_KEY_DIR` | `00-create-lxc.sh` | défaut `/root/.ssh/lxc-keys` |
+| `CTID` (arg 1) | `00-create-lxc.sh`, `00-create-lxc-swarm.sh` | ID du container |
+| `CT_NAME` (arg 2) | `00-create-lxc.sh`, `00-create-lxc-swarm.sh` | hostname (défaut `agflow-docker`) |
+| `--swarm` (flag) | `00-create-lxc-swarm.sh` | active la prépa nœud Swarm |
+| `CORES`, `MEMORY`, `SWAP`, `DISK_SIZE` | `00-create-lxc.sh`, `00-create-lxc-swarm.sh` | ressources |
+| `STORAGE` | `00-create-lxc.sh` (défaut `local-lvm`) / `00-create-lxc-swarm.sh` (défaut `auto`) | pool de stockage rootfs |
+| `BRIDGE` | `00-create-lxc.sh`, `00-create-lxc-swarm.sh` | défaut `vmbr0` |
+| `SAFETY_MARGIN_GB` | `00-create-lxc-swarm.sh` | marge libre min. dans le pool (défaut 5) |
+| `SSH_KEY_DIR` | `00-create-lxc.sh`, `00-create-lxc-swarm.sh` | défaut `/root/.ssh/lxc-keys` |
+| `ADVERTISE_ADDR` | `02-init-swarm.sh` | force l'IP advertise du manager (défaut auto eth0) |
+| `POOL_OVERLAY`, `POOL_MASK` | `02-init-swarm.sh` | défaut `10.20.0.0/16` mask /24 |
+| `NODE_LABELS` | `02-init-swarm.sh` | défaut `role=control,tenant=agflow` |
+| `TOKEN_DIR` | `02-init-swarm.sh` | défaut `/root/.ssh/lxc-keys` |
+| `FORCE` | `02-init-swarm.sh` | si `1`, reset Swarm avant init (**destructif**) |
 | `LOKI_URL` | `02-install-alloy.sh`, `deploy-alloy-all.sh` | endpoint Loki |
 | `HOSTNAME` | `02-install-alloy.sh` | label host |
 | `PVE_HOST` | `deploy-alloy-all.sh` | alias SSH (défaut `pve`) |
