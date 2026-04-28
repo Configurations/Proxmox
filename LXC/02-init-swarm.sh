@@ -17,12 +17,12 @@
 # Exemple : ./02-init-swarm.sh 300
 #
 # Variables d'environnement :
-#   ADVERTISE_ADDR=<ip>        Force l'IP advertise (defaut: auto via eth0)
+#   ADVERTISE_ADDR=<ip>        Force l'IP advertise (defaut : auto via eth0)
 #   POOL_OVERLAY=10.20.0.0/16  Pool d'IPs pour les overlay networks
-#   POOL_MASK=24               Mask du pool overlay
+#   POOL_MASK=24               Masque du pool overlay
 #   NODE_LABELS="k=v,k2=v2"    Labels supplementaires a poser sur le node
-#   FORCE=1                    Reinit Swarm meme si deja actif (DESTRUCTIF)
-#   AUTO_FIX=1                 Corriger automatiquement live-restore (defaut)
+#   FORCE=1                    Reinitialise Swarm meme si deja actif (DESTRUCTIF)
+#   AUTO_FIX=1                 Correction automatique de live-restore (defaut)
 #
 # Pre-requis :
 #   - LXC cree via 00-create-lxc-swarm.sh ... --swarm
@@ -30,8 +30,8 @@
 #   - Modules kernel ip_vs/overlay charges sur l'hote Proxmox
 ###############################################################################
 set -uo pipefail
-# Note: pas de "set -e" global pour garder le controle des erreurs et
-# afficher les sorties detaillees en cas d'echec.
+# Note : pas de "set -e" global pour garder le controle des erreurs
+# et afficher les sorties detaillees en cas d'echec.
 
 # ── Configuration ────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -49,15 +49,15 @@ FORCE="${FORCE:-0}"
 AUTO_FIX="${AUTO_FIX:-1}"
 
 if [ -z "${CTID}" ]; then
-    echo "Usage: $0 <CTID>"
+    echo "Usage : $0 <CTID>"
     echo ""
     echo "Variables d'environnement :"
-    echo "  ADVERTISE_ADDR=<ip>        Force l'IP advertise (defaut: auto)"
+    echo "  ADVERTISE_ADDR=<ip>        Force l'IP advertise (defaut : auto)"
     echo "  POOL_OVERLAY=10.20.0.0/16  Pool d'IPs pour overlay networks"
-    echo "  POOL_MASK=24               Mask du pool overlay"
+    echo "  POOL_MASK=24               Masque du pool overlay"
     echo "  NODE_LABELS=\"k=v,k2=v2\"   Labels du node"
-    echo "  FORCE=1                    Reinit meme si Swarm actif (DESTRUCTIF)"
-    echo "  AUTO_FIX=0                 Desactive la correction auto live-restore"
+    echo "  FORCE=1                    Reinitialise meme si Swarm actif (DESTRUCTIF)"
+    echo "  AUTO_FIX=0                 Desactive la correction auto de live-restore"
     echo ""
     echo "Containers swarm-ready disponibles :"
     pct list 2>/dev/null | awk 'NR==1 || /swarm-ready/' || true
@@ -122,14 +122,14 @@ if [ "${SWARM_STATE}" = "active" ]; then
     if [ "${FORCE}" -eq 1 ]; then
         echo "  -> Swarm deja actif, FORCE=1 : leave force..."
         pct exec "${CTID}" -- docker swarm leave --force >/dev/null 2>&1 || true
-        echo "  -> Swarm reset"
+        echo "  -> Swarm reinitialise"
     else
         echo "  -> Swarm deja actif sur ce LXC."
         echo ""
         echo "  Etat actuel du cluster :"
         pct exec "${CTID}" -- docker node ls 2>/dev/null | sed 's/^/    /' || true
         echo ""
-        echo "  Pour reinitialiser (DESTRUIT le cluster) : FORCE=1 $0 ${CTID}"
+        echo "  Pour reinitialiser (DETRUIT le cluster) : FORCE=1 $0 ${CTID}"
         exit 0
     fi
 fi
@@ -140,7 +140,7 @@ echo "  -> Pas de Swarm actif : OK"
 # ══════════════════════════════════════════════════════════════════════════════
 
 echo ""
-echo "[2/7] Verification de la config Docker (live-restore)..."
+echo "[2/7] Verification de la configuration Docker (live-restore)..."
 
 LIVE_RESTORE_ON=$(pct exec "${CTID}" -- bash -c "
 if [ -f /etc/docker/daemon.json ]; then
@@ -158,13 +158,13 @@ sed -i 's/\"live-restore\":[[:space:]]*true/\"live-restore\": false/' /etc/docke
 systemctl reload docker 2>/dev/null || systemctl restart docker
 " || fail "Impossible de corriger live-restore"
         sleep 2
-        echo "  -> live-restore: false (compatible Swarm)"
+        echo "  -> live-restore : false (compatible Swarm)"
     else
         fail "live-restore=true detecte dans /etc/docker/daemon.json" \
              "Incompatible avec Swarm. Relancez avec AUTO_FIX=1 ou corrigez manuellement."
     fi
 else
-    echo "  -> live-restore: false (compatible Swarm) : OK"
+    echo "  -> live-restore : false (compatible Swarm) : OK"
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -191,7 +191,7 @@ if ! ping -c 1 -W 2 "${ADVERTISE_ADDR}" >/dev/null 2>&1; then
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Verifier conflit pool overlay vs LAN
+# Verifier les conflits du pool overlay vs LAN
 # ══════════════════════════════════════════════════════════════════════════════
 
 echo ""
@@ -201,7 +201,7 @@ POOL_PREFIX=$(echo "${POOL_OVERLAY}" | cut -d. -f1-2)
 ADV_PREFIX=$(echo "${ADVERTISE_ADDR}" | cut -d. -f1-2)
 
 if [ "${POOL_PREFIX}" = "${ADV_PREFIX}" ]; then
-    echo "  -> ATTENTION : pool overlay (${POOL_OVERLAY}) chevauche le subnet du LXC (${ADVERTISE_ADDR})"
+    echo "  -> ATTENTION : le pool overlay (${POOL_OVERLAY}) chevauche le subnet du LXC (${ADVERTISE_ADDR})"
     echo "     Risque de conflit reseau."
     echo ""
     read -p "  Continuer quand meme ? [y/N] " -r confirm
@@ -210,16 +210,15 @@ if [ "${POOL_PREFIX}" = "${ADV_PREFIX}" ]; then
         exit 1
     fi
 fi
-echo "  -> Pool overlay : ${POOL_OVERLAY} mask /${POOL_MASK}"
+echo "  -> Pool overlay : ${POOL_OVERLAY} masque /${POOL_MASK}"
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Init Swarm (avec capture d'erreur correcte)
+# Initialisation Swarm (avec capture d'erreur correcte)
 # ══════════════════════════════════════════════════════════════════════════════
 
 echo ""
 echo "[5/7] Initialisation Swarm..."
 
-# Capture stdout+stderr et code de retour separement, sans set -e qui sort avant le check
 INIT_OUTPUT=$(pct exec "${CTID}" -- docker swarm init \
     --advertise-addr "${ADVERTISE_ADDR}" \
     --listen-addr "${ADVERTISE_ADDR}:2377" \
@@ -233,8 +232,8 @@ if [ ${INIT_RC} -ne 0 ]; then
     echo "${INIT_OUTPUT}" | sed 's/^/    /'
     echo ""
     echo "  Causes courantes :"
-    echo "  - live-restore=true : verifie /etc/docker/daemon.json"
-    echo "  - Subnet conflict : essayez POOL_OVERLAY=172.30.0.0/16"
+    echo "  - live-restore=true : verifiez /etc/docker/daemon.json"
+    echo "  - Conflit de subnet : essayez POOL_OVERLAY=172.30.0.0/16"
     echo "  - Module kernel manquant sur l'hote : modprobe ip_vs overlay"
     echo "  - IP mal detectee : ADVERTISE_ADDR=<ip> $0 ${CTID}"
     exit 1
@@ -286,7 +285,7 @@ echo "[7/7] Configuration du node (labels)..."
 
 NODE_ID=$(pct exec "${CTID}" -- docker node ls --format '{{.ID}}' 2>/dev/null | head -1)
 if [ -z "${NODE_ID}" ]; then
-    echo "  -> ATTENTION : impossible de recuperer le NODE_ID, skip labels."
+    echo "  -> ATTENTION : impossible de recuperer le NODE_ID, labels ignores."
 else
     IFS=',' read -ra LABELS_ARRAY <<< "${NODE_LABELS}"
     LABEL_ARGS=""
@@ -299,7 +298,7 @@ else
         UPDATE_OUTPUT=$(pct exec "${CTID}" -- docker node update ${LABEL_ARGS} "${NODE_ID}" 2>&1)
         UPDATE_RC=$?
         if [ ${UPDATE_RC} -ne 0 ]; then
-            echo "  -> ATTENTION : echec pose des labels (continue) :"
+            echo "  -> ATTENTION : echec de la pose des labels (poursuite) :"
             echo "${UPDATE_OUTPUT}" | sed 's/^/    /'
         else
             echo "  -> Labels poses : ${NODE_LABELS}"
@@ -319,8 +318,8 @@ echo ""
 echo "  Manager :"
 echo "  - LXC      : ${CTID}"
 echo "  - IP       : ${ADVERTISE_ADDR}"
-echo "  - Port     : 2377 (cluster mgmt) + 7946 (gossip) + 4789 (overlay/VXLAN)"
-echo "  - Pool     : ${POOL_OVERLAY} mask /${POOL_MASK}"
+echo "  - Ports    : 2377 (cluster mgmt) + 7946 (gossip) + 4789 (overlay/VXLAN)"
+echo "  - Pool     : ${POOL_OVERLAY} masque /${POOL_MASK}"
 echo "  - Labels   : ${NODE_LABELS}"
 echo ""
 echo "  Etat du cluster :"

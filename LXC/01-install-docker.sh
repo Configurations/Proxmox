@@ -9,12 +9,12 @@
 #   pct exec <CTID> -- bash -c "$(wget -qLO - <URL>)"
 #
 # Note 1 : ce script installe UNIQUEMENT Docker + outils de base.
-# Pas de reverse proxy (Caddy/Nginx) — a deployer separement, soit en service
-# Swarm si vous utilisez le routing mesh, soit sur un LXC dedie.
+# Pas de reverse proxy (Caddy/Nginx) : a deployer separement, soit en service
+# Swarm via le routing mesh, soit sur un LXC dedie.
 #
 # Note 2 : la configuration Docker est compatible Swarm par defaut
-# (live-restore: false). Si vous voulez live-restore pour du Docker classique
-# bare-metal uniquement, lancez avec LIVE_RESTORE=1.
+# (live-restore: false). Pour Docker classique bare-metal uniquement,
+# lancez avec LIVE_RESTORE=1.
 ###############################################################################
 set -euo pipefail
 
@@ -37,7 +37,7 @@ echo ""
 # ── Verifier qu'on est root ──────────────────────────────────────────────────
 if [ "$(id -u)" -ne 0 ]; then
     echo "ERREUR : Ce script doit etre execute en tant que root."
-    echo "         Pas de sudo dans un LXC — connectez-vous en root."
+    echo "         Pas de sudo dans un LXC : connectez-vous en root."
     exit 1
 fi
 
@@ -72,7 +72,7 @@ echo "  -> OK"
 
 # ── 2. Outils de base ───────────────────────────────────────────────────────
 echo "[2/5] Installation des outils de base..."
-check_disk_space "avant install outils de base"
+check_disk_space "avant installation des outils de base"
 apt-get "${APT_OPTS[@]}" install -y -qq \
   curl wget git vim htop tmux \
   ca-certificates gnupg lsb-release \
@@ -82,7 +82,7 @@ apt-get "${APT_OPTS[@]}" install -y -qq \
 echo "  -> OK"
 
 # ── 3. Mises a jour automatiques (security only) ────────────────────────────
-echo "[3/5] Configuration des mises a jour automatiques (security only)..."
+echo "[3/5] Configuration des mises a jour automatiques (securite uniquement)..."
 cat > /etc/apt/apt.conf.d/50unattended-upgrades << 'EOF'
 Unattended-Upgrade::Allowed-Origins {
     "${distro_id}:${distro_codename}-security";
@@ -112,9 +112,9 @@ systemctl enable unattended-upgrades >/dev/null 2>&1 || true
 systemctl restart unattended-upgrades >/dev/null 2>&1 || true
 echo "  -> Patches de securite Ubuntu actives (Docker exclu)"
 
-# ── 4. Repo Docker + installation ──────────────────────────────────────────
+# ── 4. Repository Docker + installation ─────────────────────────────────────
 echo "[4/5] Installation Docker Engine..."
-check_disk_space "avant install Docker (besoin ~500 MB)"
+check_disk_space "avant installation de Docker (besoin ~500 MB)"
 
 install -m 0755 -d /etc/apt/keyrings
 if [ ! -f /etc/apt/keyrings/docker.gpg ]; then
@@ -142,10 +142,10 @@ mkdir -p /etc/docker
 # live-restore : par defaut false (compatible Swarm)
 if [ "${LIVE_RESTORE}" = "1" ]; then
     LIVE_RESTORE_VAL="true"
-    echo "  -> live-restore: true (Docker classique, NON compatible Swarm)"
+    echo "  -> live-restore : true (Docker classique, NON compatible Swarm)"
 else
     LIVE_RESTORE_VAL="false"
-    echo "  -> live-restore: false (compatible Swarm)"
+    echo "  -> live-restore : false (compatible Swarm)"
 fi
 
 tee /etc/docker/daemon.json > /dev/null << EOF
@@ -167,7 +167,7 @@ systemctl enable docker >/dev/null 2>&1
 systemctl restart docker
 echo "  -> OK"
 
-# ── Nettoyage cache apt ──────────────────────────────────────────────────────
+# ── Nettoyage du cache apt ───────────────────────────────────────────────────
 echo ""
 echo "  Nettoyage du cache apt..."
 apt-get clean
@@ -197,7 +197,7 @@ fi
 
 FREE_MB=$(df --output=avail -BM / | tail -1 | tr -d 'M ')
 echo ""
-echo "  Espace disque libre apres install : ${FREE_MB} MB"
+echo "  Espace disque libre apres installation : ${FREE_MB} MB"
 
 echo ""
 echo "==========================================="
@@ -208,7 +208,7 @@ echo "  - live-restore : ${LIVE_RESTORE_VAL} ($([ "${LIVE_RESTORE_VAL}" = "false
 echo "  - log rotation : 10 MB par fichier, 3 fichiers max"
 echo "  - storage      : overlay2"
 echo "  - address pool : 172.20.0.0/16 (subnets /24)"
-echo "  - auto-updates : security only (Docker exclu)"
+echo "  - auto-updates : securite uniquement (Docker exclu)"
 echo ""
 echo "  Notes :"
 echo "  - Aucun reverse proxy installe (par design)."

@@ -13,17 +13,17 @@
 #   - Ajoute /dev/net/tun au container (necessaire pour VXLAN)
 #   - Configure les sysctl reseau dans le container
 #   - Tag le container "swarm-ready"
-#   L'init Swarm lui-meme se fait via 02-init-swarm.sh (separe).
+#   L'initialisation Swarm se fait via 02-init-swarm.sh (separe).
 #
-# Storage automatique (STORAGE=auto, defaut) :
-#   - Affiche un dashboard de tous les storages disponibles
+# Storage automatique (STORAGE=auto, par defaut) :
+#   - Affiche un tableau de bord des storages disponibles
 #   - Selectionne automatiquement celui avec le plus d'espace libre
 #   - Verifie l'espace disponible AVANT pct create
-#   - Refuse la creation si pas assez de place + suggere une alternative
+#   - Refuse la creation si pas assez de place et suggere une alternative
 #
-# Check Docker post-install :
+# Verification post-installation Docker :
 #   - Verifie que Docker est operationnel a la fin
-#   - Echoue clairement si l'install a plante (ex: pool sature en cours de route)
+#   - Echec clair si l'installation a plante (ex : pool sature en cours de route)
 #
 # Resout :
 #   - AppArmor "permission denied"
@@ -33,7 +33,7 @@
 #   - UID/GID remapping (unprivileged -> privileged)
 #   - VXLAN / overlay network pour Swarm
 #   - Storage sature (selection automatique d'un pool avec assez de place)
-#   - Install Docker incomplete (verification post-install)
+#   - Installation Docker incomplete (verification post-install)
 #
 # Inclut :
 #   - Generation de clefs SSH (sauvegardees sur l'hote)
@@ -56,7 +56,7 @@ set -euo pipefail
 # ── Configuration par defaut ─────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Parsing args : detecter --swarm n'importe ou dans la liste
+# Parsing des arguments : detection de --swarm n'importe ou dans la liste
 SWARM_MODE=0
 ARGS=()
 for arg in "$@"; do
@@ -68,7 +68,7 @@ done
 set -- "${ARGS[@]}"
 
 CTID="${1:-}"
-# Sanitize hostname: replace underscores/dots with hyphens, lowercase, strip invalid chars
+# Sanitize hostname : remplacer underscores/points par tirets, en minuscules
 CT_NAME_RAW="${2:-agflow-docker}"
 CT_NAME=$(echo "${CT_NAME_RAW}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
 CORES="${CORES:-4}"
@@ -83,19 +83,19 @@ SSH_KEY_DIR="${SSH_KEY_DIR:-/root/.ssh/lxc-keys}"
 SAFETY_MARGIN_GB="${SAFETY_MARGIN_GB:-5}"
 
 if [ -z "${CTID}" ]; then
-    echo "Usage: $0 <CTID> [hostname] [--swarm]"
+    echo "Usage : $0 <CTID> [hostname] [--swarm]"
     echo ""
     echo "Options :"
-    echo "  --swarm    Configure le LXC pour etre un node Docker Swarm"
+    echo "  --swarm    Configure le LXC pour qu'il soit un node Docker Swarm"
     echo "             (modules kernel hote, /dev/net/tun, sysctl reseau)"
     echo ""
     echo "Variables d'environnement :"
-    echo "  STORAGE=auto      Selection automatique du storage avec le plus d'espace (defaut)"
-    echo "  STORAGE=<nom>     Force un storage specifique (ex: extended-lvm, local-lvm)"
-    echo "  DISK_SIZE=30      Taille du disque rootfs en GB (defaut 30)"
-    echo "  CORES=4           Nombre de cores CPU (defaut 4)"
-    echo "  MEMORY=8192       RAM en MB (defaut 8192)"
-    echo "  SAFETY_MARGIN_GB=5  Marge minimale a laisser libre dans le pool (defaut 5)"
+    echo "  STORAGE=auto         Selection automatique du storage avec le plus d'espace (defaut)"
+    echo "  STORAGE=<nom>        Force un storage specifique (ex : extended-lvm, local-lvm)"
+    echo "  DISK_SIZE=30         Taille du disque rootfs en GB (defaut 30)"
+    echo "  CORES=4              Nombre de coeurs CPU (defaut 4)"
+    echo "  MEMORY=8192          RAM en MB (defaut 8192)"
+    echo "  SAFETY_MARGIN_GB=5   Marge minimale a laisser libre dans le pool (defaut 5)"
     echo ""
     echo "Containers disponibles :"
     pct list
@@ -105,7 +105,7 @@ fi
 CONF="/etc/pve/lxc/${CTID}.conf"
 
 # ══════════════════════════════════════════════════════════════════════════════
-# DASHBOARD STORAGES + SELECTION AUTOMATIQUE
+# TABLEAU DE BORD STORAGES + SELECTION AUTOMATIQUE
 # ══════════════════════════════════════════════════════════════════════════════
 # Affiche tous les storages utilisables pour rootfs LXC, indique leur etat,
 # et permet la selection automatique du meilleur (STORAGE=auto).
@@ -118,8 +118,6 @@ show_storage_dashboard() {
     printf "  %-20s %10s %10s %10s %6s  %s\n" "STORAGE" "TOTAL" "USED" "FREE" "USE%" "STATUS"
     echo "  ------------------------------------------------------------------------"
 
-    # Recupere les storages depuis pvesm status, format : Name Type Status Total Used Avail %
-    # On filtre ceux qui supportent rootfs (lvm, lvmthin, zfspool, dir avec content rootfs)
     pvesm status 2>/dev/null | tail -n +2 | while read -r line; do
         local name=$(echo "$line" | awk '{print $1}')
         local type=$(echo "$line" | awk '{print $2}')
@@ -128,18 +126,15 @@ show_storage_dashboard() {
         local used_kb=$(echo "$line" | awk '{print $5}')
         local avail_kb=$(echo "$line" | awk '{print $6}')
 
-        # Conversion en GB (entiers)
         local total_gb=$((total_kb / 1024 / 1024))
         local used_gb=$((used_kb / 1024 / 1024))
         local avail_gb=$((avail_kb / 1024 / 1024))
 
-        # Pourcentage d'utilisation
         local pct=0
         if [ "$total_kb" -gt 0 ]; then
             pct=$((used_kb * 100 / total_kb))
         fi
 
-        # Verifier si le storage supporte rootfs (content de pvesm)
         local content
         content=$(grep -A 5 "^${type}: ${name}$" /etc/pve/storage.cfg 2>/dev/null | grep -m1 "content " | awk '{$1=""; print $0}' | xargs || echo "")
         local supports_rootfs="no"
@@ -151,7 +146,6 @@ show_storage_dashboard() {
             supports_rootfs="yes"
         fi
 
-        # Code visuel selon utilisation
         local marker=""
         if [ "${supports_rootfs}" = "no" ]; then
             marker="(no rootfs)"
@@ -172,9 +166,6 @@ show_storage_dashboard() {
 
 # Trouve le storage avec le plus d'espace libre, parmi ceux qui supportent rootfs
 auto_select_storage() {
-    local best_name=""
-    local best_avail=0
-
     pvesm status 2>/dev/null | tail -n +2 | while read -r line; do
         local name=$(echo "$line" | awk '{print $1}')
         local type=$(echo "$line" | awk '{print $2}')
@@ -183,7 +174,6 @@ auto_select_storage() {
 
         [ "${status}" != "active" ] && continue
 
-        # Filtrer les types qui supportent rootfs
         local content
         content=$(grep -A 5 "^${type}: ${name}$" /etc/pve/storage.cfg 2>/dev/null | grep -m1 "content " | awk '{$1=""; print $0}' | xargs || echo "")
         local supports_rootfs="no"
@@ -196,7 +186,6 @@ auto_select_storage() {
         fi
         [ "${supports_rootfs}" != "yes" ] && continue
 
-        # Comparer l'espace dispo (sortie via stdout pour contourner subshell)
         echo "${avail_kb} ${name}"
     done | sort -rn | head -1 | awk '{print $2}'
 }
@@ -210,7 +199,7 @@ check_storage_has_space() {
     line=$(pvesm status 2>/dev/null | awk -v s="${storage_name}" '$1==s {print}' | head -1)
 
     if [ -z "${line}" ]; then
-        echo "ERREUR: storage '${storage_name}' introuvable dans pvesm status"
+        echo "ERREUR : storage '${storage_name}' introuvable dans pvesm status"
         return 1
     fi
 
@@ -219,22 +208,22 @@ check_storage_has_space() {
     local avail_gb=$((avail_kb / 1024 / 1024))
 
     if [ "${status}" != "active" ]; then
-        echo "ERREUR: storage '${storage_name}' n'est pas actif (status: ${status})"
+        echo "ERREUR : storage '${storage_name}' n'est pas actif (status : ${status})"
         return 1
     fi
 
     local needed_with_margin=$((needed_gb + SAFETY_MARGIN_GB))
     if [ "${avail_gb}" -lt "${needed_with_margin}" ]; then
-        echo "ERREUR: storage '${storage_name}' n'a pas assez d'espace"
-        echo "        Disponible : ${avail_gb} GB"
-        echo "        Requis     : ${needed_gb} GB + ${SAFETY_MARGIN_GB} GB de marge = ${needed_with_margin} GB"
+        echo "ERREUR : storage '${storage_name}' n'a pas assez d'espace"
+        echo "         Disponible : ${avail_gb} GB"
+        echo "         Requis     : ${needed_gb} GB + ${SAFETY_MARGIN_GB} GB de marge = ${needed_with_margin} GB"
         return 1
     fi
 
     return 0
 }
 
-# Affiche le dashboard et resout STORAGE=auto si necessaire (mode CREATION uniquement)
+# Affiche le tableau de bord et resout STORAGE=auto si necessaire (mode CREATION uniquement)
 if ! pct status "${CTID}" &>/dev/null; then
     show_storage_dashboard
 
@@ -242,7 +231,7 @@ if ! pct status "${CTID}" &>/dev/null; then
         echo "  STORAGE=auto -> selection automatique..."
         STORAGE=$(auto_select_storage)
         if [ -z "${STORAGE}" ]; then
-            echo "  ERREUR: aucun storage actif compatible rootfs trouve."
+            echo "  ERREUR : aucun storage actif compatible rootfs trouve."
             exit 1
         fi
         echo "  -> Storage selectionne : ${STORAGE}"
@@ -250,13 +239,13 @@ if ! pct status "${CTID}" &>/dev/null; then
     fi
 
     # Verification d'espace AVANT toute creation
-    echo "  Verification de l'espace sur ${STORAGE} (besoin: ${DISK_SIZE} GB + ${SAFETY_MARGIN_GB} GB marge)..."
+    echo "  Verification de l'espace sur ${STORAGE} (besoin : ${DISK_SIZE} GB + ${SAFETY_MARGIN_GB} GB de marge)..."
     if ! check_storage_has_space "${STORAGE}" "${DISK_SIZE}"; then
         echo ""
         echo "  -> Suggestion : utilisez le storage avec le plus d'espace libre"
-        local_best=$(auto_select_storage)
-        if [ -n "${local_best}" ] && [ "${local_best}" != "${STORAGE}" ]; then
-            echo "     STORAGE=${local_best} $0 ${CTID} ${CT_NAME_RAW}"
+        BEST_STORAGE=$(auto_select_storage)
+        if [ -n "${BEST_STORAGE}" ] && [ "${BEST_STORAGE}" != "${STORAGE}" ]; then
+            echo "     STORAGE=${BEST_STORAGE} $0 ${CTID} ${CT_NAME_RAW}"
         fi
         exit 1
     fi
@@ -343,7 +332,6 @@ if [ "${MODE}" = "create" ]; then
         exit 1
     fi
 
-    # Tags : ajouter swarm-ready si mode Swarm
     if [ "${SWARM_MODE}" -eq 1 ]; then
         CT_TAGS="agflow,docker,swarm-ready"
         CT_DESCRIPTION="agflow.docker platform (Swarm node)"
@@ -352,16 +340,16 @@ if [ "${MODE}" = "create" ]; then
         CT_DESCRIPTION="agflow.docker platform"
     fi
 
-    echo "  CT ID     : ${CTID}"
-    echo "  Nom       : ${CT_NAME}"
-    echo "  CPU       : ${CORES} cores"
-    echo "  RAM       : ${MEMORY} MB"
-    echo "  Swap      : ${SWAP} MB"
-    echo "  Disque    : ${DISK_SIZE}G"
-    echo "  Storage   : ${STORAGE}"
-    echo "  Reseau    : ${BRIDGE}"
-    echo "  Template  : ${TEMPLATE}"
-    echo "  Tags      : ${CT_TAGS}"
+    echo "  CT ID    : ${CTID}"
+    echo "  Nom      : ${CT_NAME}"
+    echo "  CPU      : ${CORES} coeurs"
+    echo "  RAM      : ${MEMORY} MB"
+    echo "  Swap     : ${SWAP} MB"
+    echo "  Disque   : ${DISK_SIZE}G"
+    echo "  Storage  : ${STORAGE}"
+    echo "  Reseau   : ${BRIDGE}"
+    echo "  Template : ${TEMPLATE}"
+    echo "  Tags     : ${CT_TAGS}"
     echo ""
 
     # ── Creer le container (directement privileged) ──────────────────────────
@@ -386,7 +374,7 @@ if [ "${MODE}" = "create" ]; then
     echo "[2/3] Ajout de la configuration Docker-ready..."
     cat >> "${CONF}" << 'EOF'
 
-# Docker dans LXC — permissions necessaires
+# Docker dans LXC : permissions necessaires
 lxc.apparmor.profile: unconfined
 lxc.cap.drop:
 lxc.mount.auto: proc:rw sys:rw cgroup:rw
@@ -394,11 +382,11 @@ lxc.cgroup2.devices.allow: a
 lxc.mount.entry: /sys/kernel/security sys/kernel/security none bind,optional 0 0
 EOF
 
-    # ── Ajouter la config Swarm si demande ───────────────────────────────────
+    # ── Ajouter la config Swarm si demandee ──────────────────────────────────
     if [ "${SWARM_MODE}" -eq 1 ]; then
         cat >> "${CONF}" << 'EOF'
 
-# Docker Swarm — overlay network (VXLAN) requiert /dev/net/tun
+# Docker Swarm : overlay network (VXLAN) requiert /dev/net/tun
 lxc.cgroup2.devices.allow: c 10:200 rwm
 lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file 0 0
 EOF
@@ -415,12 +403,12 @@ EOF
 # ══════════════════════════════════════════════════════════════════════════════
 else
 
-    # ── Detecter si conversion unprivileged -> privileged ────────────────────
+    # ── Detecter une conversion unprivileged -> privileged ───────────────────
     WAS_UNPRIVILEGED=0
     if grep -q "^unprivileged: 1" "${CONF}" 2>/dev/null; then
         WAS_UNPRIVILEGED=1
         echo "  [!] Container actuellement unprivileged -> sera converti en privileged"
-        echo "      Les UIDs/GIDs du filesystem seront corriges automatiquement."
+        echo "      Les UIDs/GIDs du systeme de fichiers seront corriges automatiquement."
         echo ""
     fi
 
@@ -497,7 +485,7 @@ else
         pct unmount "${CTID}"
         echo "  -> Rootfs demonte"
     else
-        echo "[4/6] Deja privileged, skip remapping UIDs."
+        echo "[4/6] Deja privileged, pas de remapping UIDs."
     fi
 
     # ── Calculer la ligne tags (ajouter swarm-ready si --swarm) ──────────────
@@ -534,7 +522,7 @@ ${SWAP_CONF}
 ${TAGS_LINE}
 unprivileged: 0
 
-# Docker dans LXC — permissions necessaires
+# Docker dans LXC : permissions necessaires
 lxc.apparmor.profile: unconfined
 lxc.cap.drop:
 lxc.mount.auto: proc:rw sys:rw cgroup:rw
@@ -542,11 +530,10 @@ lxc.cgroup2.devices.allow: a
 lxc.mount.entry: /sys/kernel/security sys/kernel/security none bind,optional 0 0
 EOF
 
-    # ── Ajouter la config Swarm si demande ───────────────────────────────────
     if [ "${SWARM_MODE}" -eq 1 ]; then
         cat >> "${CONF}" << 'EOF'
 
-# Docker Swarm — overlay network (VXLAN) requiert /dev/net/tun
+# Docker Swarm : overlay network (VXLAN) requiert /dev/net/tun
 lxc.cgroup2.devices.allow: c 10:200 rwm
 lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file 0 0
 EOF
@@ -595,9 +582,9 @@ UseDNS=yes
 UseRoutes=yes
 NETEOF
     systemctl restart systemd-networkd
-    echo "  -> Config DHCP creee"
+    echo "  -> Configuration DHCP creee"
 else
-    echo "  -> Config DHCP deja presente"
+    echo "  -> Configuration DHCP deja presente"
 fi
 
 sleep 5
@@ -626,7 +613,7 @@ net.ipv4.ip_forward=1
 net.bridge.bridge-nf-call-iptables=1
 net.bridge.bridge-nf-call-ip6tables=1
 
-# Conntrack pour les overlay networks (eviter saturation sur charge)
+# Conntrack pour les overlay networks (eviter la saturation sur charge)
 net.netfilter.nf_conntrack_max=131072
 
 # Buffers UDP plus larges (VXLAN encapsule en UDP/4789)
@@ -643,7 +630,7 @@ if [ -c /dev/net/tun ]; then
     echo '  -> /dev/net/tun present : OK (VXLAN ready)'
 else
     echo '  -> ATTENTION : /dev/net/tun absent. VXLAN ne fonctionnera pas.'
-    echo '     Verifiez la config LXC : grep tun ${CONF}'
+    echo '     Verifiez la configuration LXC : grep tun ${CONF}'
 fi
 "
 fi
@@ -658,7 +645,7 @@ KEY_FILE="${SSH_KEY_DIR}/id_ed25519_lxc${CTID}"
 if [ -f "${KEY_FILE}" ]; then
     echo "  -> Clef SSH existante : ${KEY_FILE}"
 else
-    echo "  -> Generation clef SSH..."
+    echo "  -> Generation de la clef SSH..."
     ssh-keygen -t ed25519 -f "${KEY_FILE}" -N "" -C "proxmox-host->lxc-${CTID}" -q
     echo "  -> Clef generee : ${KEY_FILE}"
 fi
@@ -667,7 +654,7 @@ PUB_KEY=$(cat "${KEY_FILE}.pub")
 
 pct exec "${CTID}" -- bash -c "
 if ! command -v sshd &>/dev/null; then
-    echo '  -> Installation openssh-server...'
+    echo '  -> Installation de openssh-server...'
     apt-get update -qq >/dev/null 2>&1
     apt-get install -y -qq openssh-server >/dev/null 2>&1
     echo '  -> openssh-server installe'
@@ -703,8 +690,6 @@ if [ -f "${DOCKER_SCRIPT}" ]; then
     pct push "${CTID}" "${DOCKER_SCRIPT}" /root/01-install-docker.sh
     pct exec "${CTID}" -- chmod +x /root/01-install-docker.sh
 
-    # On ne fait PAS echouer le script si l'install Docker plante,
-    # pour qu'on puisse afficher le diagnostic correctement a la fin.
     if pct exec "${CTID}" -- /root/01-install-docker.sh; then
         DOCKER_INSTALL_OK=1
     else
@@ -716,26 +701,25 @@ else
     echo "  [!] ${DOCKER_SCRIPT} introuvable -- installation Docker ignoree."
 fi
 
-# ── Verification post-install Docker ─────────────────────────────────────────
+# ── Verification post-installation Docker ────────────────────────────────────
 echo ""
-echo "  Verification post-install Docker..."
+echo "  Verification post-installation Docker..."
 
 DOCKER_OK=0
 if pct exec "${CTID}" -- bash -c "command -v docker >/dev/null && docker info >/dev/null 2>&1"; then
     DOCKER_OK=1
     echo "  -> Docker daemon : OK (operationnel)"
 
-    # Test minimal : pouvoir lancer un container
     if pct exec "${CTID}" -- docker run --rm hello-world >/dev/null 2>&1; then
         echo "  -> Docker run    : OK (test hello-world reussi)"
     else
-        echo "  -> Docker run    : ECHEC (peut etre reseau ou pull registry)"
+        echo "  -> Docker run    : ECHEC (probleme reseau ou pull registry)"
     fi
 else
     echo "  -> ERREUR : Docker n'est pas operationnel."
     echo ""
     echo "  Causes probables :"
-    echo "  - Pool storage sature en cours d'install (No space left on device)"
+    echo "  - Pool storage sature en cours d'installation (No space left on device)"
     echo "  - Repository Docker inaccessible (probleme reseau)"
     echo "  - Conflit de paquets"
     echo ""
@@ -745,7 +729,7 @@ else
     echo "  - Espace dans les pools Proxmox :"
     pvesm status 2>/dev/null | awk 'NR>1 {printf "    %-20s %s%%\n", $1, int($5*100/$4)}'
     echo ""
-    echo "  Pour relancer l'install Docker manuellement (apres avoir libere de l'espace) :"
+    echo "  Pour relancer l'installation Docker manuellement (apres avoir libere de l'espace) :"
     echo "    pct exec ${CTID} -- bash /root/01-install-docker.sh"
 fi
 
@@ -769,7 +753,7 @@ if ! id agflow &>/dev/null; then
     useradd -m -s /bin/bash -G sudo,docker agflow 2>/dev/null || useradd -m -s /bin/bash agflow
     echo '  -> Utilisateur agflow cree'
 else
-    echo '  -> Utilisateur agflow existe deja'
+    echo '  -> Utilisateur agflow existant'
 fi
 
 echo 'agflow:${AGFLOW_PASS}' | chpasswd
@@ -843,19 +827,19 @@ echo "  - Distribution : ${CT_DISTRO}"
 echo "  - IP           : ${CT_IP} (${IP_TYPE})"
 echo ""
 echo "  Infrastructure :"
-echo "  - unprivileged: 0 (privileged)"
+echo "  - unprivileged : 0 (privileged)"
 echo "  - nesting + keyctl actives"
-echo "  - AppArmor: unconfined"
-echo "  - cgroup2: all devices allowed"
+echo "  - AppArmor : unconfined"
+echo "  - cgroup2 : tous devices autorises"
 if [ "${SWARM_MODE}" -eq 1 ]; then
 echo "  - /dev/net/tun monte (VXLAN ready)"
 echo "  - sysctl Swarm appliques"
 fi
 echo ""
 echo "  SSH :"
-echo "  - Clef privee : ${KEY_FILE}"
+echo "  - Clef privee  : ${KEY_FILE}"
 echo "  - Clef publique : ${KEY_FILE}.pub"
-echo "  - Root login par clef uniquement"
+echo "  - Connexion root par clef uniquement"
 echo ""
 echo "  Acces :"
 echo "    pct enter ${CTID}"
@@ -887,8 +871,8 @@ fi
 if [ "${SWARM_MODE}" -eq 1 ] && [ "${DOCKER_OK}" -eq 1 ]; then
     echo ""
     echo "  Prochaine etape Swarm :"
-    echo "    - Premier manager  : ./02-init-swarm.sh ${CTID}"
-    echo "    - Worker/manager   : ./03-join-swarm.sh ${CTID} <token> <manager-ip>"
+    echo "    - Premier manager : ./02-init-swarm.sh ${CTID}"
+    echo "    - Worker/manager  : ./03-join-swarm.sh ${CTID} <token> <manager-ip>"
 fi
 echo ""
 echo "==========================================="
