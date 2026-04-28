@@ -71,6 +71,16 @@ for AGENT_NAME in "${AGENTS[@]}"; do
     echo "     ⚠️  SOUL.md introuvable sur le repo"
   fi
 
+  # Fichiers optionnels : AGENTS.md et HEARTBEAT.md
+  for OPT_FILE in "AGENTS.md" "HEARTBEAT.md"; do
+    OPT_URL="$BASE_URL/Agents/$AGENT_NAME/$OPT_FILE"
+    if wget -qO "$WORKSPACE_DIR/$OPT_FILE" "$OPT_URL" 2>/dev/null && [ -s "$WORKSPACE_DIR/$OPT_FILE" ]; then
+      echo "     ✅ $OPT_FILE"
+    else
+      rm -f "$WORKSPACE_DIR/$OPT_FILE"
+    fi
+  done
+
   UPDATED=$((UPDATED + 1))
 done
 
@@ -86,12 +96,13 @@ if [ "$UPDATED" -gt 0 ]; then
   read -rp "🔁 Redémarrer le service OpenClaw ? (o/N) : " RESTART
   if [[ "$RESTART" =~ ^[oOyY]$ ]]; then
     echo ""
-    echo "♻️  Redémarrage du service openclaw..."
-    systemctl restart openclaw
-    echo "✅ Service openclaw redémarré."
+    echo "♻️  Redémarrage du service openclaw-gateway..."
+    systemctl restart openclaw-gateway
+    echo "✅ Service openclaw-gateway redémarré."
+    systemctl status openclaw-gateway --no-pager
   else
     echo ""
     echo "ℹ️  Redémarrage ignoré. Tu peux redémarrer manuellement avec :"
-    echo "   systemctl restart openclaw"
+    echo "   systemctl restart openclaw-gateway"
   fi
 fi

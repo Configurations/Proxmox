@@ -86,13 +86,27 @@ else
   echo "  ⚠️  SOUL.md introuvable sur le repo ($SOUL_URL)"
 fi
 
+# Fichiers optionnels : AGENTS.md et HEARTBEAT.md (présents uniquement sur certains agents)
+OPTIONAL_FILES=("AGENTS.md" "HEARTBEAT.md")
+INSTALLED_OPTIONAL=""
+
+for OPT_FILE in "${OPTIONAL_FILES[@]}"; do
+  OPT_URL="$BASE_URL/Agents/$AGENT_NAME/$OPT_FILE"
+  if wget -qO "$WORKSPACE_DIR/$OPT_FILE" "$OPT_URL" 2>/dev/null && [ -s "$WORKSPACE_DIR/$OPT_FILE" ]; then
+    echo "  ✅ $OPT_FILE → $WORKSPACE_DIR/$OPT_FILE"
+    INSTALLED_OPTIONAL="$INSTALLED_OPTIONAL, $OPT_FILE"
+  else
+    rm -f "$WORKSPACE_DIR/$OPT_FILE"
+  fi
+done
+
 # ── 6. Résumé ─────────────────────────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  ✅ Agent '$AGENT_NAME' installé !"
 echo ""
 echo "  Workspace   : $WORKSPACE_DIR"
-echo "  Fichiers    : IDENTITY.md, SOUL.md"
+echo "  Fichiers    : IDENTITY.md, SOUL.md$INSTALLED_OPTIONAL"
 echo ""
 echo "  Vérifie le statut : openclaw agents list"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

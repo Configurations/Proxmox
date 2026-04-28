@@ -1,0 +1,51 @@
+# Caddy host LXC 203 — reverse proxy + serveur statique frontend.
+# Cloudflare Tunnel termine TLS et envoie en HTTP sur :80.
+# Pas de TLS ici (géré par CF).
+#
+# Déploiement : copier ce fichier vers /etc/caddy/Caddyfile sur LXC 203 puis
+#   systemctl reload caddy
+
+:80 {
+    encode zstd gzip
+
+    # Endpoints API + auth backend → reverse proxy vers le container Docker
+    @api path /api/*
+    handle @api {
+        reverse_proxy 127.0.0.1:8000 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto https
+        }
+    }
+
+    # /health du backend exposé direct (pour monitoring)
+    handle /health {
+        reverse_proxy 127.0.0.1:8000
+    }
+
+    # Tout le reste → fichiers statiques du frontend
+    # try_files {path} /index.html → SPA fallback pour React Router
+    handle {
+        root * /opt/agflow/frontend/dist
+        try_files {path} /index.html
+        file_server
+    }
+
+    # Headers de sécurité
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        # CSP basique — à durcir en V2
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://security.yoops.org; font-src 'self' data:; frame-ancestors 'none'"
+        # Suppression de l'header serveur
+        -Server
+    }
+
+    # Logs format console (lus par Loki/Alloy si déployé)
+    log {
+        output stdout
+        format console
+        level INFO
+    }
+}
