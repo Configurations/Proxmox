@@ -8,17 +8,26 @@
 # Usage depuis l'hote Proxmox :
 #   pct exec <CTID> -- bash -c "$(wget -qLO - <URL>)"
 #
-# Ou depuis l'interieur du container :
-#   bash -c "$(wget -qLO - <URL>)"
+# Note 1 : ce script installe UNIQUEMENT Docker + outils de base.
+# Pas de reverse proxy (Caddy/Nginx) — a deployer separement, soit en service
+# Swarm si vous utilisez le routing mesh, soit sur un LXC dedie.
+#
+# Note 2 : la configuration Docker est compatible Swarm par defaut
+# (live-restore: false). Si vous voulez live-restore pour du Docker classique
+# bare-metal uniquement, lancez avec LIVE_RESTORE=1.
 ###############################################################################
 set -euo pipefail
 
 # ── Mode non-interactif pour apt/dpkg ─────────────────────────────────────────
-# Evite tout prompt (conffile modifie, debconf, etc.) qui bloquerait le script
-# quand il est lance via pct exec. --force-confold garde la version locale des
-# fichiers de config deja modifies (ex: sshd_config touche par le script 00).
 export DEBIAN_FRONTEND=noninteractive
 APT_OPTS=(-o Dpkg::Options::=--force-confold -o Dpkg::Options::=--force-confdef)
+
+# Espace minimum requis dans / avant les operations majeures (en MB)
+MIN_FREE_MB="${MIN_FREE_MB:-1024}"
+
+# live-restore : par defaut DESACTIVE (incompatible avec Swarm)
+# Mettre LIVE_RESTORE=1 pour Docker classique uniquement
+LIVE_RESTORE="${LIVE_RESTORE:-0}"
 
 echo "==========================================="
 echo "  Installation Docker (LXC)"
@@ -32,25 +41,82 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
+# ── Helper : verifier l'espace disque libre ──────────────────────────────────
+check_disk_space() {
+    local context="$1"
+    local free_mb
+    free_mb=$(df --output=avail -BM / | tail -1 | tr -d 'M ')
+
+    if [ "${free_mb}" -lt "${MIN_FREE_MB}" ]; then
+        echo ""
+        echo "  ERREUR : espace disque insuffisant (${free_mb} MB libre, ${MIN_FREE_MB} MB requis)"
+        echo "  Contexte : ${context}"
+        echo ""
+        echo "  Solutions :"
+        echo "  - Liberer : apt clean && rm -rf /tmp/* /var/cache/apt/archives/*.deb"
+        echo "  - Etendre rootfs depuis l'hote : pct resize <CTID> rootfs +10G"
+        echo "  - Verifier le pool Proxmox : pvesm status"
+        exit 1
+    fi
+    echo "  -> Espace disque libre : ${free_mb} MB (OK)"
+}
+
+check_disk_space "demarrage du script"
+echo ""
+
 # ── 1. Mise a jour systeme ───────────────────────────────────────────────────
-echo "[1/6] Mise a jour du systeme..."
+echo "[1/5] Mise a jour du systeme..."
 apt-get update -qq
 apt-get "${APT_OPTS[@]}" upgrade -y -qq
 echo "  -> OK"
 
 # ── 2. Outils de base ───────────────────────────────────────────────────────
-echo "[2/6] Installation des outils de base..."
+echo "[2/5] Installation des outils de base..."
+check_disk_space "avant install outils de base"
 apt-get "${APT_OPTS[@]}" install -y -qq \
   curl wget git vim htop tmux \
   ca-certificates gnupg lsb-release \
   python3 python3-pip python3-venv \
-  openssh-server
+  openssh-server \
+  unattended-upgrades apt-listchanges
 echo "  -> OK"
 
-# ── 3. Ajout du repo Docker ─────────────────────────────────────────────────
-echo "[3/6] Ajout du depot Docker officiel..."
-install -m 0755 -d /etc/apt/keyrings
+# ── 3. Mises a jour automatiques (security only) ────────────────────────────
+echo "[3/5] Configuration des mises a jour automatiques (security only)..."
+cat > /etc/apt/apt.conf.d/50unattended-upgrades << 'EOF'
+Unattended-Upgrade::Allowed-Origins {
+    "${distro_id}:${distro_codename}-security";
+    "${distro_id}ESMApps:${distro_codename}-apps-security";
+    "${distro_id}ESM:${distro_codename}-infra-security";
+};
+Unattended-Upgrade::Package-Blacklist {
+    // Docker mis a jour manuellement (cycle dedie, pas via security feed)
+    "docker-ce";
+    "docker-ce-cli";
+    "containerd.io";
+};
+Unattended-Upgrade::AutoFixInterruptedDpkg "true";
+Unattended-Upgrade::MinimalSteps "true";
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+Unattended-Upgrade::Automatic-Reboot "false";
+EOF
 
+cat > /etc/apt/apt.conf.d/20auto-upgrades << 'EOF'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+APT::Periodic::AutocleanInterval "7";
+EOF
+
+systemctl enable unattended-upgrades >/dev/null 2>&1 || true
+systemctl restart unattended-upgrades >/dev/null 2>&1 || true
+echo "  -> Patches de securite Ubuntu actives (Docker exclu)"
+
+# ── 4. Repo Docker + installation ──────────────────────────────────────────
+echo "[4/5] Installation Docker Engine..."
+check_disk_space "avant install Docker (besoin ~500 MB)"
+
+install -m 0755 -d /etc/apt/keyrings
 if [ ! -f /etc/apt/keyrings/docker.gpg ]; then
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
       gpg --dearmor -o /etc/apt/keyrings/docker.gpg
@@ -63,10 +129,6 @@ echo "deb [arch=$(dpkg --print-architecture) \
   $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
   tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-echo "  -> OK"
-
-# ── 4. Installation Docker ──────────────────────────────────────────────────
-echo "[4/6] Installation de Docker Engine..."
 apt-get update -qq
 apt-get "${APT_OPTS[@]}" install -y -qq \
   docker-ce docker-ce-cli containerd.io \
@@ -74,10 +136,19 @@ apt-get "${APT_OPTS[@]}" install -y -qq \
 echo "  -> OK"
 
 # ── 5. Configuration Docker production ──────────────────────────────────────
-echo "[5/6] Configuration Docker pour la production..."
+echo "[5/5] Configuration Docker pour la production..."
 mkdir -p /etc/docker
 
-tee /etc/docker/daemon.json > /dev/null << 'EOF'
+# live-restore : par defaut false (compatible Swarm)
+if [ "${LIVE_RESTORE}" = "1" ]; then
+    LIVE_RESTORE_VAL="true"
+    echo "  -> live-restore: true (Docker classique, NON compatible Swarm)"
+else
+    LIVE_RESTORE_VAL="false"
+    echo "  -> live-restore: false (compatible Swarm)"
+fi
+
+tee /etc/docker/daemon.json > /dev/null << EOF
 {
   "log-driver": "json-file",
   "log-opts": {
@@ -88,52 +159,22 @@ tee /etc/docker/daemon.json > /dev/null << 'EOF'
     {"base": "172.20.0.0/16", "size": 24}
   ],
   "storage-driver": "overlay2",
-  "live-restore": true
+  "live-restore": ${LIVE_RESTORE_VAL}
 }
 EOF
 
-systemctl enable docker
+systemctl enable docker >/dev/null 2>&1
 systemctl restart docker
 echo "  -> OK"
 
-# ── 6. Caddy reverse proxy (TLS interne) ─────────────────────────────────────
-echo "[6/6] Installation de Caddy (reverse proxy)..."
-apt-get "${APT_OPTS[@]}" install -y -qq debian-keyring debian-archive-keyring apt-transport-https
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg 2>/dev/null
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list > /dev/null
-apt-get update -qq
-apt-get "${APT_OPTS[@]}" install -y -qq caddy
+# ── Nettoyage cache apt ──────────────────────────────────────────────────────
+echo ""
+echo "  Nettoyage du cache apt..."
+apt-get clean
+apt-get autoremove -y -qq 2>/dev/null || true
+echo "  -> OK"
 
-# Generate Caddyfile — reverse proxy minimal (HTTP)
-# Le SSL est gere par Cloudflare Tunnel en front — pas besoin de TLS ici.
-# Les domaines agflow.docker sont a ajouter manuellement apres deploiement.
-cat > /etc/caddy/Caddyfile << 'CADDYEOF'
-# ── agflow.docker — Reverse Proxy ──────────────────
-# Caddy ecoute en HTTP sur le port 80.
-# Cloudflare Tunnel gere le SSL cote navigateur.
-#
-# Pour ajouter un domaine : dupliquer le bloc exemple ci-dessous,
-# decommenter, adapter, puis : systemctl reload caddy
-
-:80 {
-    # Exemple : decommenter et adapter pour chaque service expose
-    #
-    # @admin host admin.example.org
-    # handle @admin {
-    #     reverse_proxy localhost:8080
-    # }
-
-    handle {
-        respond "agflow.docker — no route configured" 404
-    }
-}
-CADDYEOF
-
-systemctl enable caddy
-systemctl restart caddy
-echo "  -> Caddy installe et configure"
-
-# ── Verification ─────────────────────────────────────────────────────────────
+# ── Verification finale ──────────────────────────────────────────────────────
 echo ""
 echo "  Verification..."
 echo ""
@@ -142,28 +183,39 @@ if docker info &>/dev/null; then
     echo "  Docker Engine : $(docker --version)"
     echo "  Compose       : $(docker compose version)"
     echo ""
-
-    # Test rapide
     if docker run --rm hello-world &>/dev/null; then
         echo "  Docker run    : OK"
     else
-        echo "  Docker run    : echec (premier lancement peut etre lent)"
+        echo "  Docker run    : echec (registry inaccessible ?)"
     fi
 else
     echo "  ERREUR : Docker ne repond pas."
     echo "  Verifiez : systemctl status docker"
+    echo "  Logs     : journalctl -u docker -n 50"
     exit 1
 fi
 
+FREE_MB=$(df --output=avail -BM / | tail -1 | tr -d 'M ')
+echo ""
+echo "  Espace disque libre apres install : ${FREE_MB} MB"
+
 echo ""
 echo "==========================================="
-echo "  Docker + Caddy installes dans le LXC."
+echo "  Docker installe dans le LXC."
 echo ""
-echo "  Caddy ecoute sur :80 (HTTP — SSL gere par Cloudflare Tunnel)."
-echo "  Aucun domaine configure — editer /etc/caddy/Caddyfile puis :"
-echo "    systemctl reload caddy"
+echo "  Configuration :"
+echo "  - live-restore : ${LIVE_RESTORE_VAL} ($([ "${LIVE_RESTORE_VAL}" = "false" ] && echo "compatible Swarm" || echo "Docker classique"))"
+echo "  - log rotation : 10 MB par fichier, 3 fichiers max"
+echo "  - storage      : overlay2"
+echo "  - address pool : 172.20.0.0/16 (subnets /24)"
+echo "  - auto-updates : security only (Docker exclu)"
+echo ""
+echo "  Notes :"
+echo "  - Aucun reverse proxy installe (par design)."
+echo "  - Pour exposer des services HTTP : Caddy/Traefik en service Swarm"
+echo "    ou LXC dedie au reverse proxy."
 echo ""
 echo "  Prochaine etape :"
-echo "  - Deployer la stack agflow.docker (docker compose up -d)"
-echo "  - Configurer le tunnel Cloudflare (service: http://<IP>:80)"
+echo "  - Si LXC swarm-ready : ./02-init-swarm.sh <CTID>"
+echo "  - Sinon : deployer vos stacks (docker compose up -d)"
 echo "==========================================="
