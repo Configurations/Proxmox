@@ -1,16 +1,17 @@
-# LXC — Provisioning Proxmox + Docker Swarm + Observabilité
+# LXC — Proxmox + Docker Swarm + Observability
 
-Scripts et configurations pour provisionner des conteneurs LXC sur Proxmox avec Docker, Docker Swarm et collecte de logs centralisée via Grafana Alloy + Loki.
+Standalone scripts to provision Proxmox LXC containers configured for Docker (and optionally Docker Swarm), with centralized log collection via Grafana Alloy + Loki.
 
-## Vue d'ensemble
+> **Note**: This folder is a self-contained side project. It will be split into a dedicated repository later. It does not follow the `Installs/+runs/` convention of the parent repository.
 
-Cette infrastructure homelab repose sur trois couches :
+## What this gives you
 
-**Provisioning LXC** — Création de conteneurs Proxmox configurés pour Docker (privileged, AppArmor unconfined, nesting activé), avec installation automatisée de Docker et clés SSH. Optionnellement préparés pour Docker Swarm (`/dev/net/tun`, sysctls réseau, modules kernel hôte).
+- **Privileged Docker-ready LXCs** in a single command — AppArmor unconfined, nesting, keyctl, SSH keys, dedicated user
+- **Optional Docker Swarm support** — kernel modules, `/dev/net/tun`, sysctls, Swarm-ready tag
+- **Centralized log collection** — Grafana Alloy on each LXC, pushing to Loki + Grafana on a dedicated LXC
+- **Idempotent procedures** — destroy and recreate as many times as you want, scripts handle reconfiguration
 
-**Orchestration Docker Swarm** — Mode cluster sur un ou plusieurs LXC pour déployer des stacks multi-services avec routing mesh, overlay networks chiffrés, et placement automatique. Le LXC manager initialise le cluster et distribue les tokens worker/manager.
-
-**Observabilité centralisée** — Un agent Grafana Alloy est déployé sur chaque LXC pour collecter les logs Docker (containers) et journald (système), puis pousser vers Loki sur le LXC `agflow-logs`. Grafana fournit l'interface de visualisation et de requête.
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -24,266 +25,289 @@ Cette infrastructure homelab repose sur trois couches :
 │  └────────────┘  └────────────┘  └─────────────────┘    │
 │        │              │              ▲                  │
 │        └──────────────┴──────────────┘                  │
-│              Logs vers Loki                             │
+│              Logs pushed to Loki                        │
 └─────────────────────────────────────────────────────────┘
 ```
 
-## Pré-requis
+## Prerequisites
 
-- **Proxmox VE 8+** sur l'hôte
-- **Template Ubuntu 24.04** dans le storage `local` (`pveam download local ubuntu-24.04-standard_24.04-2_amd64.tar.zst`)
-- **Storage avec rootfs** disponible (LVM-thin, ZFS pool, ou LVM classique avec `content rootdir`)
-- **Accès SSH root** depuis le poste local vers l'hôte Proxmox (alias SSH `pve` recommandé pour `deploy-alloy-all.sh`)
+- Proxmox VE 8+ on the host
+- Ubuntu 24.04 template available (`pveam download local ubuntu-24.04-standard_24.04-2_amd64.tar.zst`)
+- Storage with `rootdir` content type (LVM-thin, ZFS pool, or LVM)
+- For `deploy-alloy-all.sh` only: SSH access from a workstation to the Proxmox host (SSH alias `pve` recommended)
 
-## Structure du dossier
+## Quick start
+
+All commands run on the **Proxmox host** unless stated otherwise. No git clone needed — fetch each script directly.
+
+### Create a Docker-only LXC
+
+```bash
+bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/LXC/00-create-lxc.sh)" _ 200 my-service
+```
+
+### Create a Swarm manager (recommended setup)
+
+```bash
+# 1. Provision LXC + Docker + Swarm prereqs
+STORAGE=extended-lvm DISK_SIZE=50 \
+  bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/LXC/00-create-lxc.sh)" _ 300 swarm-1 --swarm
+
+# 2. Initialize the Swarm cluster
+bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/LXC/02-init-swarm.sh)" _ 300
+```
+
+The manager is ready. Worker tokens are saved at `/root/.ssh/lxc-keys/swarm-tokens-300.json`.
+
+### Deploy Alloy log collector on all LXCs
+
+This one runs from your **local workstation**, not the Proxmox host. It needs the full repo locally because it pushes multiple files via `pct push`:
+
+```bash
+# On your local machine
+git clone https://github.com/Configurations/Proxmox.git
+cd Proxmox/LXC
+
+# Deploy on a single LXC (auto-detects Loki IP from LXC 116)
+LXC_HOSTS="300" ./deploy-alloy-all.sh
+
+# Deploy on all active LXCs
+./deploy-alloy-all.sh
+
+# Strict mode (fail if Loki unreachable)
+STRICT_CHECKS=1 ./deploy-alloy-all.sh
+```
+
+> **Note**: `deploy-alloy-all.sh` is the only script that requires local files. All others can be run via `bash -c "$(wget -qLO - ...)"`.
+
+## Folder structure
 
 ```
 LXC/
-├── 00-create-lxc.sh                # Provisioning LXC + Docker (+ Swarm en option)
-├── 01-install-docker.sh            # Install Docker (appelé par 00)
-├── 02-init-swarm.sh                # Init manager Swarm
-├── 03-install-alloy.sh             # Install collecteur Alloy
-├── deploy-alloy-all.sh             # Orchestration Alloy multi-LXC
-├── alloy-agent/                    # Configurations Alloy
-│   ├── config.alloy                # Mode Docker (containers + journald)
-│   ├── config-journald-only.alloy  # Mode systemd (journald seul)
-│   └── docker-compose.yml          # Compose pour le mode Docker
-└── logs-stack/                     # Stack Loki + Grafana centralisée
+├── 00-create-lxc.sh                # Provision LXC + Docker (+ Swarm option)
+├── 01-install-docker.sh            # Install Docker (called by 00)
+├── 02-init-swarm.sh                # Initialize Swarm manager
+├── 03-install-alloy.sh             # Install Alloy log collector
+├── deploy-alloy-all.sh             # Multi-LXC Alloy orchestrator (run locally)
+├── alloy-agent/                    # Alloy configurations
+│   ├── config.alloy                # Docker mode (containers + journald)
+│   ├── config-journald-only.alloy  # Systemd mode (journald only)
+│   ├── docker-compose.yml          # Compose file for Docker mode
+│   └── README.md
+└── logs-stack/                     # Centralized Loki + Grafana stack
     ├── docker-compose.yml
     ├── loki/
     ├── grafana/
     └── README.md
 ```
 
-## Workflow type
+## Where each script runs
 
-### Provisionner un nouveau LXC Docker simple
+| Script | Runs from | Targets | Notes |
+|---|---|---|---|
+| `00-create-lxc.sh` | Proxmox host | Proxmox host (creates LXC) | Standalone via wget |
+| `01-install-docker.sh` | Inside LXC (pushed by 00) | LXC | Standalone if needed |
+| `02-init-swarm.sh` | Proxmox host | LXC via `pct exec` | Standalone via wget |
+| `03-install-alloy.sh` | Inside LXC (pushed by deploy-alloy-all) | LXC | Standalone if needed |
+| `deploy-alloy-all.sh` | Local workstation | Multiple LXCs via SSH+pct | Requires local repo clone |
 
-```bash
-# Sur l'hôte Proxmox, depuis le dossier LXC/
-./00-create-lxc.sh 200 mon-service
-
-# Le script :
-# - Affiche un tableau de bord des storages disponibles
-# - Sélectionne le storage avec le plus d'espace libre (STORAGE=auto par défaut)
-# - Crée le LXC privileged avec Docker
-# - Configure SSH + utilisateur agflow
-# - Renvoie un JSON avec IP, password, clés SSH
-```
-
-### Provisionner un manager Swarm
-
-```bash
-# 1. Création + Docker (avec préparation Swarm)
-STORAGE=extended-lvm DISK_SIZE=50 ./00-create-lxc.sh 300 swarm-1 --swarm
-
-# 2. Initialisation du cluster
-./02-init-swarm.sh 300
-
-# Le manager est prêt. Tokens sauvegardés dans :
-#   /root/.ssh/lxc-keys/swarm-tokens-300.json
-```
-
-### Ajouter Alloy à un LXC existant
-
-```bash
-# Depuis le poste local, dans le repo
-cd LXC/
-
-# Sur un LXC unique (auto-detect IP de Loki)
-LXC_HOSTS="300" ./deploy-alloy-all.sh
-
-# Sur tous les LXC actifs
-./deploy-alloy-all.sh
-
-# En mode strict (échec si Loki injoignable)
-STRICT_CHECKS=1 ./deploy-alloy-all.sh
-```
-
-## Référence des scripts
+## Script reference
 
 ### `00-create-lxc.sh`
 
-Provisionne un LXC privileged Docker-ready, avec option Swarm.
+Provisions a privileged Docker-ready LXC, with optional Swarm preparation.
 
-**Mode auto** (création) : si le CTID n'existe pas, crée le LXC.
-**Mode reconfiguration** : si le CTID existe, met à jour la config (utile pour migrer un LXC unprivileged → privileged, ou ajouter le support Swarm).
+- **Create mode** (default): if the CTID does not exist, creates the LXC
+- **Reconfigure mode**: if the CTID exists, updates the configuration (useful for unprivileged → privileged migration, or adding Swarm support to an existing LXC)
 
 ```bash
-# Création standard
-./00-create-lxc.sh 200 mon-lxc
+# Standard creation
+bash -c "$(wget -qLO - .../LXC/00-create-lxc.sh)" _ 200 my-lxc
 
-# Avec Swarm
-./00-create-lxc.sh 300 swarm-mgr --swarm
+# With Swarm support
+bash -c "$(wget -qLO - .../LXC/00-create-lxc.sh)" _ 300 swarm-mgr --swarm
 
-# Reconfigurer un LXC existant pour ajouter Swarm
-./00-create-lxc.sh 200 --swarm
-
-# Variables d'environnement utiles
-STORAGE=auto              # Sélection auto (défaut)
-STORAGE=extended-lvm      # Force un storage spécifique
-DISK_SIZE=50              # GB rootfs (défaut 30)
-CORES=8 MEMORY=16384      # Specs CPU/RAM
-SAFETY_MARGIN_GB=10       # Marge minimale dans le pool
+# Reconfigure existing LXC for Swarm
+bash -c "$(wget -qLO - .../LXC/00-create-lxc.sh)" _ 200 --swarm
 ```
 
-**Sortie JSON** (parsable pour pipelines) :
+Useful environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `STORAGE` | `auto` | `auto` selects pool with most free space; or force a specific name |
+| `DISK_SIZE` | `30` | rootfs size in GB |
+| `CORES` | `4` | CPU cores |
+| `MEMORY` | `8192` | RAM in MB |
+| `SAFETY_MARGIN_GB` | `5` | Minimum free space to keep in the pool |
+
+JSON output (parseable for pipelines):
+
 ```json
-{"status":"ok","ctid":"300","ip":"...","docker_ok":1,"swarm_mode":1,"swarm_ready":true}
+{"status":"ok","ctid":"300","ip":"192.168.10.114","docker_ok":1,"swarm_mode":1,"swarm_ready":true}
 ```
 
 ### `01-install-docker.sh`
 
-Installe Docker Engine + Compose plugin dans un LXC. **Appelé automatiquement par `00`**, mais utilisable seul si besoin.
+Installs Docker Engine and Compose plugin inside an LXC. Automatically called by `00-create-lxc.sh`, but can be run standalone.
 
-Configurations notables :
-- `live-restore: false` par défaut (compatible Swarm). Variable `LIVE_RESTORE=1` pour Docker classique.
-- `default-address-pools: 172.20.0.0/16` (subnets /24) — évite les conflits LAN
-- `unattended-upgrades` configuré pour les patchs de sécurité Ubuntu (Docker exclu, géré séparément)
-- Log rotation : 10 MB par fichier, 3 fichiers max
+Notable defaults:
+
+- `live-restore: false` (Swarm-compatible). Set `LIVE_RESTORE=1` for classic Docker bare-metal
+- `default-address-pools: 172.20.0.0/16` with /24 subnets — avoids common LAN conflicts
+- `unattended-upgrades` configured for Ubuntu security patches (Docker excluded — managed separately)
+- Log rotation: 10 MB per file, 3 files max
 
 ### `02-init-swarm.sh`
 
-Initialise le premier manager Swarm sur un LXC `swarm-ready`. Vérifie les pré-requis, détecte et corrige automatiquement `live-restore: true` si présent.
+Initializes a Swarm manager on a `swarm-ready` LXC. Pre-checks the LXC, automatically fixes `live-restore: true` if found.
 
 ```bash
-# Init standard
-./02-init-swarm.sh 300
-
-# Variables utiles
-ADVERTISE_ADDR=192.168.10.114    # Force l'IP advertise
-POOL_OVERLAY=10.20.0.0/16        # Pool d'IPs overlay (défaut)
-NODE_LABELS="role=control,zone=paris"
-FORCE=1                          # Reset un cluster existant
+# Standard init
+bash -c "$(wget -qLO - .../LXC/02-init-swarm.sh)" _ 300
 ```
 
-**Tokens sauvegardés** dans `/root/.ssh/lxc-keys/swarm-tokens-<CTID>.json`.
+Useful variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `ADVERTISE_ADDR` | auto-detected | Force the advertise IP |
+| `POOL_OVERLAY` | `10.20.0.0/16` | Overlay network IP pool |
+| `NODE_LABELS` | `role=control,tenant=agflow` | Labels applied to the node |
+| `FORCE` | `0` | Reset an existing cluster (DESTRUCTIVE) |
+| `AUTO_FIX` | `1` | Auto-fix `live-restore: true` if found |
+
+Tokens saved to `/root/.ssh/lxc-keys/swarm-tokens-<CTID>.json`.
 
 ### `03-install-alloy.sh`
 
-Installe l'agent Alloy dans un LXC. Détection automatique :
-- Docker présent → mode container (compose)
-- Docker absent → mode systemd (paquet Debian)
+Installs Grafana Alloy in an LXC. Detects mode automatically:
+
+- Docker present → container mode (compose)
+- Docker absent → systemd mode (Debian package)
+
+Required variables:
 
 ```bash
-# Variables requises
 LOKI_URL="http://192.168.10.110:3100/loki/api/v1/push"
 HOSTNAME="lxc300"
-
-# Variables optionnelles
-STRICT_CHECKS=1                  # Échec si Loki injoignable
 
 bash 03-install-alloy.sh
 ```
 
-Voir [`alloy-agent/README.md`](alloy-agent/README.md) pour les détails de configuration.
+Optional `STRICT_CHECKS=1` makes the script fail if Loki is unreachable.
+
+See [`alloy-agent/README.md`](alloy-agent/README.md) for configuration details.
 
 ### `deploy-alloy-all.sh`
 
-Orchestre `03-install-alloy.sh` sur plusieurs LXC depuis le poste local. Utilise SSH vers l'hôte Proxmox + `pct push` / `pct exec`.
+Orchestrates `03-install-alloy.sh` across multiple LXCs from your local workstation. Uses SSH to the Proxmox host plus `pct push` / `pct exec`. Requires the repo to be cloned locally because it pushes multiple files.
 
 ```bash
-# Tous les LXC actifs (auto-detect IP Loki)
+# All active LXCs (auto-detects Loki IP)
 ./deploy-alloy-all.sh
 
-# Sous-ensemble
+# Subset
 LXC_HOSTS="300 201" ./deploy-alloy-all.sh
 
-# IP Loki forcée
+# Force Loki URL
 LOKI_URL="http://10.0.0.50:3100/loki/api/v1/push" ./deploy-alloy-all.sh
 ```
 
-Le script gère un **cas spécial pour le LXC 116** (qui héberge Loki lui-même) : utilise `localhost` au lieu de l'IP réseau pour éviter un aller-retour et casser une dépendance circulaire.
+Special case: when deploying to the LXC that hosts Loki itself (CTID 116 by default), the script uses `localhost` instead of the network IP to avoid an unnecessary roundtrip and break the circular dependency.
 
-## Concepts clés
+## Key concepts
 
-### LXC privileged vs unprivileged
+### Privileged vs unprivileged LXC
 
-Docker dans un LXC unprivileged demande des capabilities et un user namespace mapping fragiles. Pour une infra de homelab où le LXC est dans un réseau privé de confiance, **privileged + AppArmor unconfined** est la voie la plus simple et stable.
+Docker inside an unprivileged LXC requires fragile capability and user-namespace mapping setups. For a homelab where the LXC sits on a trusted private network, **privileged + AppArmor unconfined** is the simplest and most stable route.
 
-**Trade-off** : un container Docker compromis dans un LXC privileged a plus de capabilities qu'en unprivileged. Acceptable en homelab, à challenger pour de la prod multi-tenant.
+Trade-off: a compromised Docker container in a privileged LXC has more capabilities than in unprivileged. Acceptable for homelab, worth challenging for multi-tenant production.
 
-### Pourquoi Docker Swarm et pas Kubernetes (k3s) ?
+### Why Docker Swarm and not Kubernetes (k3s)?
 
-**Swarm** :
-- Mêmes images Docker, même socket, même `docker compose` syntax
-- Init en 1 commande, pas de plan de contrôle séparé
-- Pattern "service global" déploie un container par node automatiquement
-- Idéal pour 1-5 nodes, un seul opérateur
+**Swarm**:
+- Same Docker images, same socket, same `docker compose` syntax
+- Single-command init, no separate control plane to deploy
+- Native "service global" pattern — automatically deploys a container per node
+- Sweet spot for 1 to 5 nodes, single operator
 
-**k3s** :
-- Écosystème plus riche (Helm, opérateurs, CRDs)
-- Mais demande containerd séparé, donc rebuild des images locales
-- Plus de complexité opérationnelle
+**k3s**:
+- Richer ecosystem (Helm, operators, CRDs)
+- But requires separate containerd, so local images need a registry rebuild
+- Higher operational complexity
 
-Choix homelab : **Swarm** pour son intégration Docker native et sa simplicité.
+For homelab use, Swarm wins on simplicity and Docker-native integration.
 
-### Pool d'adresses overlay
+### Overlay address pool
 
-Docker Swarm utilise par défaut `10.0.0.0/8` pour les overlay networks, ce qui crée des conflits avec les LAN privés en `10.x.x.x`. `02-init-swarm.sh` configure `10.20.0.0/16` (overridable via `POOL_OVERLAY=`).
+Docker Swarm uses `10.0.0.0/8` by default for overlay networks, which collides with private LANs in `10.x.x.x`. `02-init-swarm.sh` configures `10.20.0.0/16` (overridable via `POOL_OVERLAY=`).
 
-Pour éviter les conflits avec :
-- Bridge Docker classique : `172.20.0.0/16` (configuré dans `daemon.json`)
-- LAN homelab : `192.168.10.0/24`
+To avoid conflicts with:
+- Default Docker bridge: `172.20.0.0/16` (set in `daemon.json`)
+- Typical homelab LAN: `192.168.x.x`
 
-### Modes Alloy
+### Alloy modes
 
-L'agent Alloy a deux modes selon la présence de Docker dans le LXC :
+Alloy runs in two modes depending on Docker presence in the LXC:
 
-| Mode | Quand | Sources collectées | Déploiement |
-|------|-------|--------------------|--------------|
-| **Docker** | LXC avec Docker | Containers + journald | `docker compose up` |
-| **systemd** | LXC sans Docker (DNS, Vault, etc.) | journald uniquement | Paquet Debian + service |
+| Mode | When | Sources collected | Deployment |
+|------|------|-------------------|------------|
+| **Docker** | LXC with Docker | Containers + journald | `docker compose up` |
+| **systemd** | LXC without Docker (DNS, Vault, etc.) | journald only | Debian package + service |
 
-Voir [`alloy-agent/README.md`](alloy-agent/README.md).
+See [`alloy-agent/README.md`](alloy-agent/README.md).
 
-### IP fixe vs DHCP pour le manager Swarm
+### Static IP vs DHCP for the Swarm manager
 
-L'IP advertise du manager Swarm est gravée dans la config du cluster. **Si l'IP change, les workers ne peuvent plus joindre le manager.**
+The Swarm manager's advertise IP is baked into the cluster config. **If the IP changes, workers can no longer reach the manager.**
 
-Solutions par ordre de robustesse :
-1. **Réservation DHCP** dans le routeur (recommandée)
-2. **DNS interne** + advertise hostname plutôt qu'IP
-3. **IP statique** dans la config LXC (`pct set <CTID> -net0 ...,ip=<IP>/24,gw=<GW>`)
+Solutions in order of robustness:
+
+1. **DHCP reservation** in your router/DHCP server (recommended)
+2. **Internal DNS** + advertise via hostname instead of IP
+3. **Static IP** in the LXC config (`pct set <CTID> -net0 ...,ip=<IP>/24,gw=<GW>`)
 
 ## Troubleshooting
 
-### `docker swarm init` échoue avec "live-restore is incompatible"
+### `docker swarm init` fails with "live-restore is incompatible"
 
-Le script `02-init-swarm.sh` détecte et corrige automatiquement (`AUTO_FIX=1` par défaut). Pour désactiver : `AUTO_FIX=0 ./02-init-swarm.sh 300`.
+`02-init-swarm.sh` detects and auto-fixes this (`AUTO_FIX=1` by default). To disable: `AUTO_FIX=0 bash 02-init-swarm.sh 300`.
 
-Manuellement :
+Manual fix:
+
 ```bash
 pct exec 300 -- sed -i 's/"live-restore": true/"live-restore": false/' /etc/docker/daemon.json
 pct exec 300 -- systemctl restart docker
 ```
 
-### Pool storage saturé en cours d'install
+### Storage pool full during install
 
-`00-create-lxc.sh` vérifie l'espace disponible avant `pct create` et propose une alternative. Si le pool sature pendant l'install Docker (cas rare), recréer sur un autre storage :
+`00-create-lxc.sh` checks free space before `pct create` and suggests an alternative. If the pool fills up during Docker install (rare), recreate on a different storage:
 
 ```bash
-STORAGE=extended-lvm ./00-create-lxc.sh 300 swarm-1 --swarm
+STORAGE=extended-lvm bash 00-create-lxc.sh 300 swarm-1 --swarm
 ```
 
-### Alloy ne pousse pas vers Loki
+### Alloy not pushing to Loki
 
 ```bash
-# Voir les logs du container
+# View container logs
 pct exec <CTID> -- docker compose -f /opt/alloy-agent/docker-compose.yml logs --tail 50
 
-# Tester la connectivité Loki depuis le LXC
+# Test connectivity to Loki from inside the LXC
 pct exec <CTID> -- curl -v http://192.168.10.110:3100/ready
 ```
 
-Causes courantes :
-- Loki en cours de redémarrage → Alloy retentera automatiquement
-- Réseau cassé entre le LXC et Loki → vérifier les bridges Proxmox
-- IP Loki obsolète (DHCP a changé) → relancer `deploy-alloy-all.sh`
+Common causes:
 
-### Le LXC est en DHCP et l'IP a changé
+- Loki restarting → Alloy will retry automatically
+- Network broken between LXC and Loki → check Proxmox bridges
+- Stale Loki IP (DHCP changed) → re-run `deploy-alloy-all.sh`
 
-Pour les services critiques (manager Swarm, Loki), réserver l'IP côté DHCP serveur ou passer en IP statique :
+### LXC is on DHCP and the IP changed
+
+For critical services (Swarm manager, Loki), reserve the IP on your DHCP server or switch to static:
 
 ```bash
 pct stop <CTID>
@@ -291,14 +315,19 @@ pct set <CTID> -net0 name=eth0,bridge=vmbr0,firewall=1,ip=192.168.10.200/24,gw=1
 pct start <CTID>
 ```
 
-## Roadmap / améliorations possibles
+## Roadmap
 
-- [ ] Script `04-join-swarm.sh` pour ajouter automatiquement un worker au cluster
-- [ ] Support multi-arch (ARM) pour les futurs nodes
-- [ ] Bootstrap unifié (`bootstrap-lxc.sh`) qui orchestre 00 + 02 + 03 selon les flags
-- [ ] Réservation DHCP automatique côté serveur DHCP/DNS
-- [ ] Backup automatisé des tokens Swarm + clés SSH
+- [ ] `04-join-swarm.sh` to automatically add a worker to the cluster
+- [ ] Multi-arch (ARM) support for future nodes
+- [ ] Unified `bootstrap-lxc.sh` orchestrating 00 + 02 + 03 with flags
+- [ ] Automatic DHCP reservation via DHCP/DNS server API
+- [ ] Automated backup of Swarm tokens + SSH keys
+- [ ] **Split this folder into a dedicated repository**
 
-## Licence
+## License
 
-Voir le fichier [`LICENSE`](../LICENSE) à la racine du repo.
+See [LICENSE](../LICENSE) at the repo root.
+
+---
+
+🇫🇷 Pour la version française, voir [README-fr.md](README-fr.md).
