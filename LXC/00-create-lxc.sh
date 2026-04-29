@@ -38,14 +38,21 @@
 # Inclut :
 #   - Generation de clefs SSH (sauvegardees sur l'hote)
 #   - Configuration openssh-server dans le container
-#   - Installation Docker via 01-install-docker.sh (si present dans le meme dossier)
+#   - Installation Docker via 01-install-docker.sh
+#     (cherche en local d'abord, telecharge depuis GitHub si absent)
 #
-# Usage : ./00-create-lxc-swarm.sh <CTID> [hostname] [--swarm]
+# Usage :
+#   Local :
+#     ./00-create-lxc.sh <CTID> [hostname] [--swarm]
+#
+#   Via wget (sans clone du repo) :
+#     bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/LXC/00-create-lxc.sh)" _ <CTID> [hostname] [--swarm]
+#
 # Exemples :
-#   ./00-create-lxc-swarm.sh 200 agflow-docker-test
-#   ./00-create-lxc-swarm.sh 201 agflow-swarm-mgr --swarm
-#   STORAGE=extended-lvm ./00-create-lxc-swarm.sh 201 agflow-swarm-mgr --swarm
-#   STORAGE=auto DISK_SIZE=50 ./00-create-lxc-swarm.sh 202 agflow-data --swarm
+#   ./00-create-lxc.sh 200 agflow-docker-test
+#   ./00-create-lxc.sh 201 agflow-swarm-mgr --swarm
+#   STORAGE=extended-lvm ./00-create-lxc.sh 201 agflow-swarm-mgr --swarm
+#   STORAGE=auto DISK_SIZE=50 ./00-create-lxc.sh 202 agflow-data --swarm
 #
 # Pre-requis (creation uniquement) : un template Ubuntu dans le storage local.
 #   pveam update
@@ -54,7 +61,17 @@
 set -euo pipefail
 
 # ── Configuration par defaut ─────────────────────────────────────────────────
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# SCRIPT_DIR : compatible avec execution locale (./script.sh) ET avec bash -c "$(wget ...)"
+# Quand execute via bash -c, BASH_SOURCE[0] est vide et $0 vaut "bash".
+# Dans ce cas, on n'a pas de dossier source ; on mettra /tmp pour le fallback.
+if [ -n "${BASH_SOURCE[0]:-}" ] && [ "${BASH_SOURCE[0]:-}" != "bash" ] && [ -f "${BASH_SOURCE[0]:-}" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+    SCRIPT_DIR=""
+fi
+
+# URL du repo pour telecharger 01-install-docker.sh si absent localement
+REPO_RAW_URL="${REPO_RAW_URL:-https://github.com/Configurations/Proxmox/raw/main/LXC}"
 
 # Parsing des arguments : detection de --swarm n'importe ou dans la liste
 SWARM_MODE=0
@@ -96,6 +113,7 @@ if [ -z "${CTID}" ]; then
     echo "  CORES=4              Nombre de coeurs CPU (defaut 4)"
     echo "  MEMORY=8192          RAM en MB (defaut 8192)"
     echo "  SAFETY_MARGIN_GB=5   Marge minimale a laisser libre dans le pool (defaut 5)"
+    echo "  REPO_RAW_URL=...     URL du repo pour telecharger 01-install-docker.sh"
     echo ""
     echo "Containers disponibles :"
     pct list
@@ -682,11 +700,36 @@ echo '  -> sshd demarre'
 "
 
 # ── Installation Docker via 01-install-docker.sh ─────────────────────────────
+# Recherche le script :
+#   1) En local dans SCRIPT_DIR (mode "./00-create-lxc.sh")
+#   2) Sinon, le telecharge depuis GitHub (mode "bash -c $(wget ...)")
 DOCKER_INSTALL_OK=0
-DOCKER_SCRIPT="${SCRIPT_DIR}/01-install-docker.sh"
-if [ -f "${DOCKER_SCRIPT}" ]; then
+DOCKER_SCRIPT=""
+DOCKER_SCRIPT_TEMP=""
+
+if [ -n "${SCRIPT_DIR}" ] && [ -f "${SCRIPT_DIR}/01-install-docker.sh" ]; then
+    DOCKER_SCRIPT="${SCRIPT_DIR}/01-install-docker.sh"
     echo ""
-    echo "  Installation Docker via 01-install-docker.sh..."
+    echo "  Installation Docker via 01-install-docker.sh (local : ${DOCKER_SCRIPT})..."
+else
+    echo ""
+    echo "  Installation Docker via 01-install-docker.sh (telechargement depuis GitHub)..."
+    DOCKER_SCRIPT_TEMP="$(mktemp /tmp/01-install-docker.XXXXXX.sh)"
+    if wget -qLO "${DOCKER_SCRIPT_TEMP}" "${REPO_RAW_URL}/01-install-docker.sh"; then
+        if [ -s "${DOCKER_SCRIPT_TEMP}" ]; then
+            DOCKER_SCRIPT="${DOCKER_SCRIPT_TEMP}"
+            echo "  -> Telecharge : ${DOCKER_SCRIPT}"
+        else
+            echo "  [!] Fichier telecharge vide. URL : ${REPO_RAW_URL}/01-install-docker.sh"
+            rm -f "${DOCKER_SCRIPT_TEMP}"
+        fi
+    else
+        echo "  [!] Echec telechargement de ${REPO_RAW_URL}/01-install-docker.sh"
+        rm -f "${DOCKER_SCRIPT_TEMP}"
+    fi
+fi
+
+if [ -n "${DOCKER_SCRIPT}" ] && [ -f "${DOCKER_SCRIPT}" ]; then
     pct push "${CTID}" "${DOCKER_SCRIPT}" /root/01-install-docker.sh
     pct exec "${CTID}" -- chmod +x /root/01-install-docker.sh
 
@@ -696,9 +739,11 @@ if [ -f "${DOCKER_SCRIPT}" ]; then
         DOCKER_INSTALL_OK=0
         echo "  [!] L'installation Docker a echoue (code de sortie != 0)"
     fi
+
+    # Nettoyer le fichier temporaire si telecharge
+    [ -n "${DOCKER_SCRIPT_TEMP}" ] && rm -f "${DOCKER_SCRIPT_TEMP}"
 else
-    echo ""
-    echo "  [!] ${DOCKER_SCRIPT} introuvable -- installation Docker ignoree."
+    echo "  [!] 01-install-docker.sh introuvable -- installation Docker ignoree."
 fi
 
 # ── Verification post-installation Docker ────────────────────────────────────
