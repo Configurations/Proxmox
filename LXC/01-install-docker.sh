@@ -15,6 +15,12 @@
 # Note 2 : la configuration Docker est compatible Swarm par defaut
 # (live-restore: false). Pour Docker classique bare-metal uniquement,
 # lancez avec LIVE_RESTORE=1.
+#
+# Note 3 : le pool d'adresses Docker est fixe a 172.30.0.0/16 (subnets /24)
+# pour eviter les conflits avec :
+#   - Le pool ingress par defaut de Swarm (10.0.0.0/8)
+#   - Le pool overlay choisi pour Swarm (10.20.0.0/16 dans 02-init-swarm.sh)
+#   - Les LAN homelab classiques (192.168.x.x, 10.x.x.x)
 ###############################################################################
 set -euo pipefail
 
@@ -28,6 +34,11 @@ MIN_FREE_MB="${MIN_FREE_MB:-1024}"
 # live-restore : par defaut DESACTIVE (incompatible avec Swarm)
 # Mettre LIVE_RESTORE=1 pour Docker classique uniquement
 LIVE_RESTORE="${LIVE_RESTORE:-0}"
+
+# Pool d'adresses pour les bridges Docker classiques (docker0, docker_gwbridge,
+# custom networks). NE PAS utiliser 172.20.0.0/16 : conflit avec Swarm ingress.
+DOCKER_ADDR_POOL="${DOCKER_ADDR_POOL:-172.30.0.0/16}"
+DOCKER_ADDR_POOL_SIZE="${DOCKER_ADDR_POOL_SIZE:-24}"
 
 echo "==========================================="
 echo "  Installation Docker (LXC)"
@@ -148,6 +159,8 @@ else
     echo "  -> live-restore : false (compatible Swarm)"
 fi
 
+echo "  -> Pool d'adresses Docker : ${DOCKER_ADDR_POOL} (subnets /${DOCKER_ADDR_POOL_SIZE})"
+
 tee /etc/docker/daemon.json > /dev/null << EOF
 {
   "log-driver": "json-file",
@@ -156,7 +169,7 @@ tee /etc/docker/daemon.json > /dev/null << EOF
     "max-file": "3"
   },
   "default-address-pools": [
-    {"base": "172.20.0.0/16", "size": 24}
+    {"base": "${DOCKER_ADDR_POOL}", "size": ${DOCKER_ADDR_POOL_SIZE}}
   ],
   "storage-driver": "overlay2",
   "live-restore": ${LIVE_RESTORE_VAL}
@@ -207,13 +220,15 @@ echo "  Configuration :"
 echo "  - live-restore : ${LIVE_RESTORE_VAL} ($([ "${LIVE_RESTORE_VAL}" = "false" ] && echo "compatible Swarm" || echo "Docker classique"))"
 echo "  - log rotation : 10 MB par fichier, 3 fichiers max"
 echo "  - storage      : overlay2"
-echo "  - address pool : 172.20.0.0/16 (subnets /24)"
+echo "  - address pool : ${DOCKER_ADDR_POOL} (subnets /${DOCKER_ADDR_POOL_SIZE})"
 echo "  - auto-updates : securite uniquement (Docker exclu)"
 echo ""
 echo "  Notes :"
 echo "  - Aucun reverse proxy installe (par design)."
 echo "  - Pour exposer des services HTTP : Caddy/Traefik en service Swarm"
 echo "    ou LXC dedie au reverse proxy."
+echo "  - Pool 172.30.0.0/16 evite les conflits avec Swarm ingress (10.x)"
+echo "    et le pool overlay 10.20.0.0/16 utilise par 02-init-swarm.sh."
 echo ""
 echo "  Prochaine etape :"
 echo "  - Si LXC swarm-ready : ./02-init-swarm.sh <CTID>"
