@@ -187,6 +187,47 @@ pct exec <CTID> -- ls -la /var/run/docker.sock
 
 - [stacks/README.md](../stacks/README.md) — Application stacks deployed on the Swarm cluster (separate repo: `ag-flow/Configurations`)
 
+## Limitations
+
+### Swarm routing mesh in LXC privileged: IPVS doesn't forward properly
+
+When you publish a port with the default `mode: ingress` in a Swarm stack, requests get stuck and time out — even though the service is `Running` and the container responds correctly via its internal HTTP healthcheck.
+
+**Symptoms:**
+- `docker service ls` shows `1/1` replicas
+- `docker ps` shows the container as `Up X minutes (healthy)`
+- `curl localhost:<port>` times out
+- Pinging the container's IP works (ICMP), but TCP connections don't go through
+
+**Root cause:**
+Docker Swarm's routing mesh uses IPVS (IP Virtual Server) inside a hidden network namespace called `ingress_sbox`. Inside an LXC privileged container, IPVS rules are correctly created (you can verify with `nsenter --net=/var/run/docker/netns/ingress_sbox ipvsadm -L -n`), but the forwarding through the VXLAN overlay network doesn't traverse the nested namespace correctly. The result: connections show as `ActiveConn` in IPVS but never reach the target container.
+
+This is a kernel-level interaction between LXC namespaces and IPVS that doesn't happen on bare-metal or in VMs.
+
+**Workaround: use `mode: host` for published ports**
+
+In your `docker-compose.yml` for Swarm stacks, change:
+
+```yaml
+ports:
+  - target: 8080
+    published: 8080
+    mode: ingress    # default — broken in LXC
+```
+
+to:
+
+```yaml
+ports:
+  - target: 8080
+    published: 8080
+    mode: host       # bypasses routing mesh, works in LXC
+```
+
+**Trade-off:** with `mode: host`, the port is published directly on the node where the container runs, without load balancing across nodes. For a single-node Swarm (one LXC = one node), this is equivalent. For multi-node Swarms, you lose the ability to access a service from any node — you must hit the specific node hosting the replica.
+
+**Real fix:** migrate to a Proxmox VM instead of LXC. Swarm's routing mesh works correctly in VMs.
+
 ---
 
 🇫🇷 Pour la version française, voir [README-fr.md](README-fr.md).

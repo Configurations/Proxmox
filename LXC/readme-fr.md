@@ -96,6 +96,27 @@ LXC_HOSTS="101 102 200 300" \
 
 Le script détecte automatiquement l'endpoint Loki, copie les configs Alloy, lance l'install dans chaque LXC, et saute les containers déjà à jour.
 
+Test que tout c'est bien passé.
+```bash
+cat /etc/docker/daemon.json | grep base
+
+# réponse :  
+{"base": "172.30.0.0/16", "size": 24}
+
+```
+
+```bash
+docker info | grep -E "Swarm|NodeID|Is Manager|Node Address"
+
+# réponse :  
+ Swarm: active
+  NodeID: vlmducxu914osfdpyez031qmw
+  Is Manager: true
+  Node Address: 192.168.10.118
+```
+
+
+
 ## Choix de design
 
 ### LXC privileged
@@ -182,6 +203,47 @@ Alloy en mode Docker mount `/var/run/docker.sock` depuis l'hôte. Si le LXC a Do
 pct exec <CTID> -- systemctl status docker
 pct exec <CTID> -- ls -la /var/run/docker.sock
 ```
+
+## Limitations
+
+### Routing mesh Swarm dans LXC privileged : IPVS ne forward pas correctement
+
+Quand vous publiez un port avec le `mode: ingress` par défaut dans une stack Swarm, les requêtes restent bloquées et finissent en timeout — alors même que le service est `Running` et que le container répond correctement à son healthcheck HTTP interne.
+
+**Symptômes :**
+- `docker service ls` affiche `1/1` réplicas
+- `docker ps` affiche le container `Up X minutes (healthy)`
+- `curl localhost:<port>` timeout
+- Ping de l'IP du container fonctionne (ICMP), mais les connexions TCP n'aboutissent pas
+
+**Cause racine :**
+Le routing mesh de Docker Swarm utilise IPVS (IP Virtual Server) dans un namespace réseau caché appelé `ingress_sbox`. Dans un container LXC privileged, les règles IPVS sont correctement créées (vérifiable avec `nsenter --net=/var/run/docker/netns/ingress_sbox ipvsadm -L -n`), mais le forwarding via le réseau overlay VXLAN ne traverse pas correctement le namespace imbriqué. Résultat : les connexions apparaissent en `ActiveConn` dans IPVS mais n'atteignent jamais le container cible.
+
+C'est une interaction kernel entre les namespaces LXC et IPVS qui ne se produit pas en bare-metal ou en VM.
+
+**Workaround : utiliser `mode: host` pour les ports publiés**
+
+Dans votre `docker-compose.yml` pour les stacks Swarm, changez :
+
+```yaml
+ports:
+  - target: 8080
+    published: 8080
+    mode: ingress    # défaut — cassé en LXC
+```
+
+en :
+
+```yaml
+ports:
+  - target: 8080
+    published: 8080
+    mode: host       # bypasse le routing mesh, fonctionne en LXC
+```
+
+**Compromis :** avec `mode: host`, le port est publié directement sur le node où tourne le container, sans load balancing entre les nodes. Pour un Swarm à un seul node (1 LXC = 1 node), c'est équivalent. Pour un Swarm multi-nodes, vous perdez la possibilité d'accéder à un service depuis n'importe quel node — vous devez taper l'IP du node spécifique qui héberge le réplica.
+
+**Vrai fix :** migrer vers une VM Proxmox au lieu d'un LXC. Le routing mesh de Swarm fonctionne correctement en VM.
 
 ## Liens
 
