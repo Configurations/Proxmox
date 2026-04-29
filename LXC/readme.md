@@ -34,11 +34,10 @@ Standalone scripts to provision Proxmox LXC containers configured for Docker (an
 - Proxmox VE 8+ on the host
 - Ubuntu 24.04 template available (`pveam download local ubuntu-24.04-standard_24.04-2_amd64.tar.zst`)
 - Storage with `rootdir` content type (LVM-thin, ZFS pool, or LVM)
-- For `deploy-alloy-all.sh` only: SSH access from a workstation to the Proxmox host (SSH alias `pve` recommended)
 
 ## Quick start
 
-All commands run on the **Proxmox host** unless stated otherwise. No git clone needed — fetch each script directly.
+All commands run **on the Proxmox host**. No git clone needed — every script is fetched directly via wget.
 
 ### Create a Docker-only LXC
 
@@ -61,24 +60,22 @@ The manager is ready. Worker tokens are saved at `/root/.ssh/lxc-keys/swarm-toke
 
 ### Deploy Alloy log collector on all LXCs
 
-This one runs from your **local workstation**, not the Proxmox host. It needs the full repo locally because it pushes multiple files via `pct push`:
+The script fetches everything it needs from GitHub and pushes to each LXC. Just run on the Proxmox host:
 
 ```bash
-# On your local machine
-git clone https://github.com/Configurations/Proxmox.git
-cd Proxmox/LXC
+# Auto-detects Loki IP from LXC 116, deploys to all active LXCs
+bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/LXC/deploy-alloy-all.sh)"
 
-# Deploy on a single LXC (auto-detects Loki IP from LXC 116)
-LXC_HOSTS="300" ./deploy-alloy-all.sh
-
-# Deploy on all active LXCs
-./deploy-alloy-all.sh
+# Deploy on a subset
+LXC_HOSTS="300 201" bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/LXC/deploy-alloy-all.sh)"
 
 # Strict mode (fail if Loki unreachable)
-STRICT_CHECKS=1 ./deploy-alloy-all.sh
-```
+STRICT_CHECKS=1 bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/LXC/deploy-alloy-all.sh)"
 
-> **Note**: `deploy-alloy-all.sh` is the only script that requires local files. All others can be run via `bash -c "$(wget -qLO - ...)"`.
+# Force a Loki URL (skip auto-detection)
+LOKI_URL="http://10.0.0.50:3100/loki/api/v1/push" \
+  bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/LXC/deploy-alloy-all.sh)"
+```
 
 ## Folder structure
 
@@ -88,7 +85,7 @@ LXC/
 ├── 01-install-docker.sh            # Install Docker (called by 00)
 ├── 02-init-swarm.sh                # Initialize Swarm manager
 ├── 03-install-alloy.sh             # Install Alloy log collector
-├── deploy-alloy-all.sh             # Multi-LXC Alloy orchestrator (run locally)
+├── deploy-alloy-all.sh             # Multi-LXC Alloy orchestrator
 ├── alloy-agent/                    # Alloy configurations
 │   ├── config.alloy                # Docker mode (containers + journald)
 │   ├── config-journald-only.alloy  # Systemd mode (journald only)
@@ -103,13 +100,15 @@ LXC/
 
 ## Where each script runs
 
-| Script | Runs from | Targets | Notes |
-|---|---|---|---|
-| `00-create-lxc.sh` | Proxmox host | Proxmox host (creates LXC) | Standalone via wget |
-| `01-install-docker.sh` | Inside LXC (pushed by 00) | LXC | Standalone if needed |
-| `02-init-swarm.sh` | Proxmox host | LXC via `pct exec` | Standalone via wget |
-| `03-install-alloy.sh` | Inside LXC (pushed by deploy-alloy-all) | LXC | Standalone if needed |
-| `deploy-alloy-all.sh` | Local workstation | Multiple LXCs via SSH+pct | Requires local repo clone |
+| Script | Runs from | Targets |
+|---|---|---|
+| `00-create-lxc.sh` | Proxmox host | Proxmox host (creates LXC) |
+| `01-install-docker.sh` | Inside LXC (pushed by 00) | LXC |
+| `02-init-swarm.sh` | Proxmox host | LXC via `pct exec` |
+| `03-install-alloy.sh` | Inside LXC (pushed by deploy-alloy-all) | LXC |
+| `deploy-alloy-all.sh` | Proxmox host | Multiple LXCs via `pct push` + `pct exec` |
+
+All scripts can be invoked via `bash -c "$(wget -qLO - ...)"` directly on the Proxmox host.
 
 ## Script reference
 
@@ -118,7 +117,7 @@ LXC/
 Provisions a privileged Docker-ready LXC, with optional Swarm preparation.
 
 - **Create mode** (default): if the CTID does not exist, creates the LXC
-- **Reconfigure mode**: if the CTID exists, updates the configuration (useful for unprivileged → privileged migration, or adding Swarm support to an existing LXC)
+- **Reconfigure mode**: if the CTID exists, updates the configuration
 
 ```bash
 # Standard creation
@@ -149,23 +148,18 @@ JSON output (parseable for pipelines):
 
 ### `01-install-docker.sh`
 
-Installs Docker Engine and Compose plugin inside an LXC. Automatically called by `00-create-lxc.sh`, but can be run standalone.
+Installs Docker Engine and Compose plugin inside an LXC. Automatically called by `00-create-lxc.sh`.
 
 Notable defaults:
 
 - `live-restore: false` (Swarm-compatible). Set `LIVE_RESTORE=1` for classic Docker bare-metal
-- `default-address-pools: 172.20.0.0/16` with /24 subnets — avoids common LAN conflicts
-- `unattended-upgrades` configured for Ubuntu security patches (Docker excluded — managed separately)
+- `default-address-pools: 172.20.0.0/16` with /24 subnets
+- `unattended-upgrades` configured for Ubuntu security patches (Docker excluded)
 - Log rotation: 10 MB per file, 3 files max
 
 ### `02-init-swarm.sh`
 
 Initializes a Swarm manager on a `swarm-ready` LXC. Pre-checks the LXC, automatically fixes `live-restore: true` if found.
-
-```bash
-# Standard init
-bash -c "$(wget -qLO - .../LXC/02-init-swarm.sh)" _ 300
-```
 
 Useful variables:
 
@@ -186,35 +180,26 @@ Installs Grafana Alloy in an LXC. Detects mode automatically:
 - Docker present → container mode (compose)
 - Docker absent → systemd mode (Debian package)
 
-Required variables:
+Required variables: `LOKI_URL`, `HOSTNAME`. Optional `STRICT_CHECKS=1` makes it fail if Loki is unreachable.
 
-```bash
-LOKI_URL="http://192.168.10.110:3100/loki/api/v1/push"
-HOSTNAME="lxc300"
-
-bash 03-install-alloy.sh
-```
-
-Optional `STRICT_CHECKS=1` makes the script fail if Loki is unreachable.
+Usually invoked via `deploy-alloy-all.sh`, but can be run standalone inside an LXC.
 
 See [`alloy-agent/README.md`](alloy-agent/README.md) for configuration details.
 
 ### `deploy-alloy-all.sh`
 
-Orchestrates `03-install-alloy.sh` across multiple LXCs from your local workstation. Uses SSH to the Proxmox host plus `pct push` / `pct exec`. Requires the repo to be cloned locally because it pushes multiple files.
+Runs on the Proxmox host. Downloads all required Alloy files from GitHub into `/tmp/alloy-files/`, then pushes them to each LXC via `pct push` and runs `03-install-alloy.sh` via `pct exec`.
 
-```bash
-# All active LXCs (auto-detects Loki IP)
-./deploy-alloy-all.sh
+| Variable | Default | Description |
+|---|---|---|
+| `LOKI_URL` | auto-detected from LXC 116 | Force the Loki endpoint |
+| `LXC_HOSTS` | active LXCs with Docker | Space-separated CTID list |
+| `LOKI_LXC` | `116` | CTID of the LXC hosting Loki |
+| `LOKI_PORT` | `3100` | Loki port |
+| `STRICT_CHECKS` | `0` | Fail if Loki unreachable from inside an LXC |
+| `REPO_BRANCH` | `main` | GitHub branch to fetch from |
 
-# Subset
-LXC_HOSTS="300 201" ./deploy-alloy-all.sh
-
-# Force Loki URL
-LOKI_URL="http://10.0.0.50:3100/loki/api/v1/push" ./deploy-alloy-all.sh
-```
-
-Special case: when deploying to the LXC that hosts Loki itself (CTID 116 by default), the script uses `localhost` instead of the network IP to avoid an unnecessary roundtrip and break the circular dependency.
+Special case: when deploying to the LXC that hosts Loki itself (CTID 116), the script uses `localhost` instead of the network IP to avoid a roundtrip and break the circular dependency.
 
 ## Key concepts
 
@@ -243,10 +228,6 @@ For homelab use, Swarm wins on simplicity and Docker-native integration.
 
 Docker Swarm uses `10.0.0.0/8` by default for overlay networks, which collides with private LANs in `10.x.x.x`. `02-init-swarm.sh` configures `10.20.0.0/16` (overridable via `POOL_OVERLAY=`).
 
-To avoid conflicts with:
-- Default Docker bridge: `172.20.0.0/16` (set in `daemon.json`)
-- Typical homelab LAN: `192.168.x.x`
-
 ### Alloy modes
 
 Alloy runs in two modes depending on Docker presence in the LXC:
@@ -272,9 +253,7 @@ Solutions in order of robustness:
 
 ### `docker swarm init` fails with "live-restore is incompatible"
 
-`02-init-swarm.sh` detects and auto-fixes this (`AUTO_FIX=1` by default). To disable: `AUTO_FIX=0 bash 02-init-swarm.sh 300`.
-
-Manual fix:
+`02-init-swarm.sh` detects and auto-fixes this. Manual fix:
 
 ```bash
 pct exec 300 -- sed -i 's/"live-restore": true/"live-restore": false/' /etc/docker/daemon.json
@@ -283,10 +262,10 @@ pct exec 300 -- systemctl restart docker
 
 ### Storage pool full during install
 
-`00-create-lxc.sh` checks free space before `pct create` and suggests an alternative. If the pool fills up during Docker install (rare), recreate on a different storage:
+`00-create-lxc.sh` checks free space before `pct create` and suggests an alternative. Recreate on a different storage:
 
 ```bash
-STORAGE=extended-lvm bash 00-create-lxc.sh 300 swarm-1 --swarm
+STORAGE=extended-lvm bash -c "$(wget -qLO - .../LXC/00-create-lxc.sh)" _ 300 swarm-1 --swarm
 ```
 
 ### Alloy not pushing to Loki
@@ -298,12 +277,6 @@ pct exec <CTID> -- docker compose -f /opt/alloy-agent/docker-compose.yml logs --
 # Test connectivity to Loki from inside the LXC
 pct exec <CTID> -- curl -v http://192.168.10.110:3100/ready
 ```
-
-Common causes:
-
-- Loki restarting → Alloy will retry automatically
-- Network broken between LXC and Loki → check Proxmox bridges
-- Stale Loki IP (DHCP changed) → re-run `deploy-alloy-all.sh`
 
 ### LXC is on DHCP and the IP changed
 

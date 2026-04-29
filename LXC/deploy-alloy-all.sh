@@ -2,89 +2,129 @@
 ###############################################################################
 # Deploiement Alloy collecteur sur tous les LXC actifs du homelab.
 #
-# A executer depuis le poste local (Windows / Linux), depuis la racine du repo
-# Configurations/Proxmox. Utilise le host Proxmox (alias SSH `pve`) comme
-# bastion :
-#   - pct push <CTID> ... pour copier les fichiers
-#   - pct exec <CTID> -- bash ... pour executer le script d'installation
+# A executer SUR L'HOTE PROXMOX (pas depuis un poste local).
 #
-# Variables :
-#   LOKI_URL  - endpoint Loki central. Si non defini, auto-detecte depuis le
-#               LXC 116 (qui heberge Loki/Grafana).
-#   LXC_HOSTS - liste d'IDs LXC a deployer. Defaut : tous les LXC actifs.
-#   PVE_HOST  - alias SSH du host Proxmox, defaut `pve`.
-#   LOKI_LXC  - CTID du LXC qui heberge Loki, defaut 116.
-#   LOKI_PORT - port Loki, defaut 3100.
+# Usage :
+#   bash -c "$(wget -qLO - https://github.com/Configurations/Proxmox/raw/main/LXC/deploy-alloy-all.sh)"
 #
-# Usage standard (auto-detect Loki) :
-#   ./deploy-alloy-all.sh
+# Le script telecharge automatiquement les fichiers necessaires depuis GitHub
+# vers /tmp/alloy-files/, puis les pousse sur chaque LXC via pct push +
+# lance l'installation via pct exec.
 #
-# Usage avec URL Loki explicite :
-#   LOKI_URL="http://192.168.10.110:3100/loki/api/v1/push" ./deploy-alloy-all.sh
+# Variables d'environnement :
+#   LOKI_URL       Endpoint Loki. Auto-detecte depuis le LXC 116 si non defini.
+#   LXC_HOSTS      Liste de CTID a traiter. Defaut : tous les LXC actifs avec Docker.
+#   LOKI_LXC       CTID du LXC qui heberge Loki. Defaut : 116.
+#   LOKI_PORT      Port Loki. Defaut : 3100.
+#   STRICT_CHECKS  Si 1, echoue si Loki injoignable depuis un LXC. Defaut : 0.
+#   REPO_BRANCH    Branche GitHub a utiliser. Defaut : main.
 #
-# Usage sur un sous-ensemble :
-#   LXC_HOSTS="201 102" ./deploy-alloy-all.sh
-#
-# Cas special : sur le LXC qui heberge Loki (116 par defaut), Alloy utilise
-# automatiquement http://localhost:3100/loki/api/v1/push pour eviter un
-# aller-retour reseau et casser la dependance circulaire.
+# Cas special : sur le LXC qui heberge Loki (116), Alloy utilise
+# automatiquement http://localhost:3100 pour eviter un aller-retour reseau
+# et casser la dependance circulaire.
 ###############################################################################
 set -euo pipefail
 
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ALLOY_AGENT_DIR="${REPO_DIR}/alloy-agent"
-INSTALL_SCRIPT="${REPO_DIR}/03-install-alloy.sh"
+# ── Configuration ────────────────────────────────────────────────────────────
+REPO_BRANCH="${REPO_BRANCH:-main}"
+RAW_URL="https://github.com/Configurations/Proxmox/raw/${REPO_BRANCH}/LXC"
 
-PVE_HOST="${PVE_HOST:-pve}"
 LOKI_LXC="${LOKI_LXC:-116}"
 LOKI_PORT="${LOKI_PORT:-3100}"
+STRICT_CHECKS="${STRICT_CHECKS:-0}"
 
-# Liste mise a jour : LXC actifs + ajout du 300 (manager Swarm),
-# retrait des 111 et 114 qui n'existent plus.
-LXC_HOSTS="${LXC_HOSTS:-101 102 108 112 113 115 116 117 201 300}"
+# Repertoire temporaire sur l'hote Proxmox pour telecharger les fichiers
+WORK_DIR="${WORK_DIR:-/tmp/alloy-files}"
 
-# ── Auto-detect Loki URL si non fournie ──────────────────────────────────────
-if [ -z "${LOKI_URL:-}" ]; then
-    echo "  -> LOKI_URL non definie, auto-detection depuis LXC ${LOKI_LXC}..."
-    LOKI_IP=$(ssh "${PVE_HOST}" "pct exec ${LOKI_LXC} -- bash -c \"hostname -I | awk '{print \\\$1}'\"" 2>/dev/null || echo "")
-    if [ -z "${LOKI_IP}" ]; then
-        echo "ERREUR : impossible de detecter l'IP du LXC ${LOKI_LXC} (Loki)."
-        echo "         Verifiez que le LXC tourne, ou forcez via :"
-        echo "         LOKI_URL=\"http://<IP>:${LOKI_PORT}/loki/api/v1/push\" $0"
-        exit 1
-    fi
-    LOKI_URL="http://${LOKI_IP}:${LOKI_PORT}/loki/api/v1/push"
-    echo "  -> Loki detecte : ${LOKI_IP} -> ${LOKI_URL}"
-fi
+# Liste par defaut : LXC actifs sans le 117 (vault stoppe). Ajustable via LXC_HOSTS.
+DEFAULT_LXC_LIST="101 102 108 112 113 115 116 201 300"
 
 # ── Verifications de pre-requis ──────────────────────────────────────────────
-if [ ! -d "${ALLOY_AGENT_DIR}" ]; then
-    echo "ERREUR : ${ALLOY_AGENT_DIR} introuvable."
-    echo "         Le script doit etre lance depuis le dossier LXC/ du repo."
+if [ "$(id -u)" -ne 0 ]; then
+    echo "ERREUR : Ce script doit etre execute en tant que root sur l'hote Proxmox."
     exit 1
 fi
 
-if [ ! -f "${INSTALL_SCRIPT}" ]; then
-    echo "ERREUR : ${INSTALL_SCRIPT} introuvable."
+if ! command -v pct &>/dev/null; then
+    echo "ERREUR : commande 'pct' introuvable."
+    echo "        Ce script doit s'executer sur un hote Proxmox VE."
     exit 1
 fi
 
-for f in config.alloy config-journald-only.alloy docker-compose.yml; do
-    if [ ! -f "${ALLOY_AGENT_DIR}/${f}" ]; then
-        echo "ERREUR : ${ALLOY_AGENT_DIR}/${f} introuvable."
-        exit 1
-    fi
-done
+if ! command -v wget &>/dev/null; then
+    echo "ERREUR : wget requis mais introuvable."
+    exit 1
+fi
 
 echo "==========================================="
 echo "  Deploiement Alloy collecteur"
 echo "==========================================="
-echo "  PVE_HOST    : ${PVE_HOST}"
-echo "  LOKI_URL    : ${LOKI_URL}"
-echo "  LOKI_LXC    : ${LOKI_LXC} (cas special : utilise localhost)"
-echo "  LXC_HOSTS   : ${LXC_HOSTS}"
-echo "  ALLOY_DIR   : ${ALLOY_AGENT_DIR}"
-echo "  INSTALL     : ${INSTALL_SCRIPT}"
+echo ""
+
+# ── Telechargement des fichiers depuis GitHub ────────────────────────────────
+echo "[1/4] Telechargement des fichiers depuis GitHub..."
+echo "      Branche : ${REPO_BRANCH}"
+mkdir -p "${WORK_DIR}"
+
+FILES_TO_FETCH=(
+    "03-install-alloy.sh"
+    "alloy-agent/config.alloy"
+    "alloy-agent/config-journald-only.alloy"
+    "alloy-agent/docker-compose.yml"
+)
+
+for file in "${FILES_TO_FETCH[@]}"; do
+    url="${RAW_URL}/${file}"
+    dest="${WORK_DIR}/$(basename "${file}")"
+    echo "  -> ${file}"
+    if ! wget -qLO "${dest}" "${url}"; then
+        echo "  ERREUR : echec telechargement ${url}"
+        exit 1
+    fi
+    if [ ! -s "${dest}" ]; then
+        echo "  ERREUR : fichier ${dest} vide apres telechargement."
+        exit 1
+    fi
+done
+
+chmod +x "${WORK_DIR}/03-install-alloy.sh"
+echo "  -> OK"
+echo ""
+
+# ── Auto-detection de l'IP Loki ──────────────────────────────────────────────
+echo "[2/4] Detection de l'IP Loki..."
+
+if [ -z "${LOKI_URL:-}" ]; then
+    if ! pct status "${LOKI_LXC}" &>/dev/null; then
+        echo "  ERREUR : LXC ${LOKI_LXC} (Loki) introuvable."
+        echo "          Forcez l'URL : LOKI_URL=\"http://<IP>:${LOKI_PORT}/loki/api/v1/push\""
+        exit 1
+    fi
+
+    if ! pct status "${LOKI_LXC}" | grep -q running; then
+        echo "  ERREUR : LXC ${LOKI_LXC} (Loki) n'est pas en cours d'execution."
+        exit 1
+    fi
+
+    LOKI_IP=$(pct exec "${LOKI_LXC}" -- bash -c "hostname -I | awk '{print \$1}'" 2>/dev/null || echo "")
+    if [ -z "${LOKI_IP}" ]; then
+        echo "  ERREUR : impossible de detecter l'IP du LXC ${LOKI_LXC}."
+        exit 1
+    fi
+    LOKI_URL="http://${LOKI_IP}:${LOKI_PORT}/loki/api/v1/push"
+    echo "  -> Loki detecte sur LXC ${LOKI_LXC} : ${LOKI_IP}"
+else
+    echo "  -> URL forcee via env : ${LOKI_URL}"
+fi
+echo ""
+
+# ── Determiner la liste des LXC ──────────────────────────────────────────────
+LXC_HOSTS="${LXC_HOSTS:-${DEFAULT_LXC_LIST}}"
+echo "[3/4] LXC cibles : ${LXC_HOSTS}"
+echo ""
+
+# ── Boucle de deploiement ────────────────────────────────────────────────────
+echo "[4/4] Deploiement..."
 echo ""
 
 FAILED=()
@@ -97,16 +137,19 @@ for CTID in ${LXC_HOSTS}; do
     echo "  LXC ${CTID} (${HOSTNAME_LABEL})"
     echo "──────────────────────────────────────────"
 
-    # Verifier que le LXC est running
-    STATUS=$(ssh "${PVE_HOST}" "pct status ${CTID} 2>/dev/null || echo absent")
-    if ! echo "${STATUS}" | grep -q "running"; then
-        echo "  [!] LXC ${CTID} status = ${STATUS} -> skip"
-        SKIPPED+=("${CTID}:${STATUS}")
+    # Verifier que le LXC existe et tourne
+    if ! pct status "${CTID}" &>/dev/null; then
+        echo "  [!] LXC ${CTID} n'existe pas -> skip"
+        SKIPPED+=("${CTID}:absent")
+        continue
+    fi
+    if ! pct status "${CTID}" | grep -q running; then
+        echo "  [!] LXC ${CTID} n'est pas running -> skip"
+        SKIPPED+=("${CTID}:stopped")
         continue
     fi
 
-    # Cas special : si CTID = LOKI_LXC, utiliser localhost pour eviter
-    # l'aller-retour reseau et la dependance circulaire.
+    # Cas special : si CTID = LOKI_LXC, utiliser localhost
     if [ "${CTID}" = "${LOKI_LXC}" ]; then
         EFFECTIVE_LOKI_URL="http://localhost:${LOKI_PORT}/loki/api/v1/push"
         echo "  [i] LXC ${CTID} heberge Loki -> utilise ${EFFECTIVE_LOKI_URL}"
@@ -115,22 +158,17 @@ for CTID in ${LXC_HOSTS}; do
     fi
 
     # Preparer le dossier source dans le LXC
-    if ! ssh "${PVE_HOST}" "pct exec ${CTID} -- bash -c 'rm -rf /tmp/alloy-agent && mkdir -p /tmp/alloy-agent'"; then
+    if ! pct exec "${CTID}" -- bash -c "rm -rf /tmp/alloy-agent && mkdir -p /tmp/alloy-agent" 2>/dev/null; then
         echo "  [!] Impossible de preparer /tmp/alloy-agent dans LXC ${CTID}"
         FAILED+=("${CTID}:mkdir-failed")
         continue
     fi
 
-    # Pousser les fichiers via pct push
-    echo "  [1/3] Copie des fichiers..."
+    # Pousser les fichiers Alloy
+    echo "  [1/3] Copie des fichiers Alloy..."
     PUSH_OK=1
     for FILE in config.alloy config-journald-only.alloy docker-compose.yml; do
-        if ! scp -q "${ALLOY_AGENT_DIR}/${FILE}" "${PVE_HOST}:/tmp/alloy-${CTID}-${FILE}"; then
-            echo "  [!] Echec scp ${FILE}"
-            PUSH_OK=0
-            break
-        fi
-        if ! ssh "${PVE_HOST}" "pct push ${CTID} /tmp/alloy-${CTID}-${FILE} /tmp/alloy-agent/${FILE} && rm /tmp/alloy-${CTID}-${FILE}"; then
+        if ! pct push "${CTID}" "${WORK_DIR}/${FILE}" "/tmp/alloy-agent/${FILE}" 2>/dev/null; then
             echo "  [!] Echec pct push ${FILE}"
             PUSH_OK=0
             break
@@ -142,19 +180,22 @@ for CTID in ${LXC_HOSTS}; do
         continue
     fi
 
-    # Pousser le script d'install
-    if ! scp -q "${INSTALL_SCRIPT}" "${PVE_HOST}:/tmp/03-install-alloy-${CTID}.sh"; then
-        echo "  [!] Echec scp 03-install-alloy.sh"
+    # Pousser le script d'installation
+    if ! pct push "${CTID}" "${WORK_DIR}/03-install-alloy.sh" /tmp/03-install-alloy.sh 2>/dev/null; then
+        echo "  [!] Echec pct push 03-install-alloy.sh"
         FAILED+=("${CTID}:script-push-failed")
         continue
     fi
-    ssh "${PVE_HOST}" "pct push ${CTID} /tmp/03-install-alloy-${CTID}.sh /tmp/03-install-alloy.sh && rm /tmp/03-install-alloy-${CTID}.sh"
-    ssh "${PVE_HOST}" "pct exec ${CTID} -- chmod +x /tmp/03-install-alloy.sh"
+    pct exec "${CTID}" -- chmod +x /tmp/03-install-alloy.sh
     echo "  -> OK"
 
     # Lancer l'installation
     echo "  [2/3] Execution 03-install-alloy.sh..."
-    if ssh "${PVE_HOST}" "pct exec ${CTID} -- env LOKI_URL='${EFFECTIVE_LOKI_URL}' HOSTNAME='${HOSTNAME_LABEL}' bash /tmp/03-install-alloy.sh"; then
+    if pct exec "${CTID}" -- env \
+        LOKI_URL="${EFFECTIVE_LOKI_URL}" \
+        HOSTNAME="${HOSTNAME_LABEL}" \
+        STRICT_CHECKS="${STRICT_CHECKS}" \
+        bash /tmp/03-install-alloy.sh; then
         echo "  -> OK"
     else
         echo "  [!] Echec installation sur LXC ${CTID}"
@@ -168,12 +209,22 @@ for CTID in ${LXC_HOSTS}; do
 done
 
 # ── Resume final ─────────────────────────────────────────────────────────────
+echo ""
 echo "==========================================="
 echo "  Resume du deploiement"
 echo "==========================================="
 echo "  Reussis  (${#SUCCESS[@]}) : ${SUCCESS[*]:-aucun}"
 echo "  Skippes  (${#SKIPPED[@]}) : ${SKIPPED[*]:-aucun}"
 echo "  Echoues  (${#FAILED[@]})  : ${FAILED[*]:-aucun}"
+echo ""
+
+# Nettoyage du dossier temporaire (optionnel, garde si echec pour debug)
+if [ "${#FAILED[@]}" -eq 0 ]; then
+    rm -rf "${WORK_DIR}"
+    echo "  Dossier temporaire ${WORK_DIR} nettoye."
+else
+    echo "  Dossier temporaire ${WORK_DIR} conserve pour debug."
+fi
 echo ""
 
 if [ ${#FAILED[@]} -ne 0 ]; then
