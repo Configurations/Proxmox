@@ -48,6 +48,9 @@ TOKEN_DIR="${TOKEN_DIR:-/root/.ssh/lxc-keys}"
 FORCE="${FORCE:-0}"
 AUTO_FIX="${AUTO_FIX:-1}"
 
+# Defaults pour les variables capturees pendant l'execution (utilisees dans le JSON final)
+LIVE_RESTORE_FIXED=0
+
 if [ -z "${CTID}" ]; then
     echo "Usage : $0 <CTID>"
     echo ""
@@ -158,6 +161,7 @@ sed -i 's/\"live-restore\":[[:space:]]*true/\"live-restore\": false/' /etc/docke
 systemctl reload docker 2>/dev/null || systemctl restart docker
 " || fail "Impossible de corriger live-restore"
         sleep 2
+        LIVE_RESTORE_FIXED=1
         echo "  -> live-restore : false (compatible Swarm)"
     else
         fail "live-restore=true detecte dans /etc/docker/daemon.json" \
@@ -344,5 +348,90 @@ echo "==========================================="
 echo ""
 
 # ── Sortie JSON (convention pipeline agflow) ─────────────────────────────────
+# Helpers JSON : escape des valeurs (backslash, quote, controles) et null si vide
+json_escape() {
+    local s="${1:-}"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+json_str_or_null() {
+    if [ -z "${1:-}" ]; then
+        printf 'null'
+    else
+        printf '"%s"' "$(json_escape "$1")"
+    fi
+}
+
+# Contexte hote / horodatage
+PROXMOX_HOST=$(hostname -f 2>/dev/null || hostname 2>/dev/null || echo "unknown")
+CREATED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+SCRIPT_VERSION="unknown"
+if [ -n "${SCRIPT_DIR:-}" ]; then
+    SCRIPT_VERSION=$(git -C "${SCRIPT_DIR}" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+fi
+
 NODE_HOSTNAME=$(pct exec "${CTID}" -- hostname 2>/dev/null || echo "")
-echo "{\"status\":\"ok\",\"manager_ctid\":\"${CTID}\",\"manager_ip\":\"${ADVERTISE_ADDR}\",\"manager_port\":2377,\"hostname\":\"${NODE_HOSTNAME}\",\"pool_overlay\":\"${POOL_OVERLAY}\",\"pool_mask\":${POOL_MASK},\"labels\":\"${NODE_LABELS}\",\"token_file\":\"${TOKEN_FILE}\"}"
+
+# Booleens JSON
+LIVE_RESTORE_WAS_ON_BOOL=$([ "${LIVE_RESTORE_ON}" = "yes" ] && echo true || echo false)
+LIVE_RESTORE_FIXED_BOOL=$([ "${LIVE_RESTORE_FIXED}" -eq 1 ] && echo true || echo false)
+FORCE_USED_BOOL=$([ "${FORCE}" -eq 1 ] && echo true || echo false)
+
+# Liste des labels en tableau JSON (parsing du format "k=v,k2=v2")
+LABELS_JSON="["
+if [ -n "${NODE_LABELS}" ]; then
+    IFS=',' read -ra LABELS_FOR_JSON <<< "${NODE_LABELS}"
+    first=1
+    for lbl in "${LABELS_FOR_JSON[@]}"; do
+        [ -z "${lbl}" ] && continue
+        [ ${first} -eq 1 ] || LABELS_JSON+=","
+        LABELS_JSON+="\"$(json_escape "${lbl}")\""
+        first=0
+    done
+fi
+LABELS_JSON+="]"
+
+# Commandes de join (pratiques pour stocker en base)
+JOIN_WORKER_CMD="docker swarm join --token ${WORKER_TOKEN} ${ADVERTISE_ADDR}:2377"
+JOIN_MANAGER_CMD="docker swarm join --token ${MANAGER_TOKEN} ${ADVERTISE_ADDR}:2377"
+
+# JSON sur une seule ligne (compat pipeline agflow)
+printf '{'
+printf '"status":"ok",'
+printf '"exit_code":0,'
+printf '"identification":{"ctid":"%s","hostname":"%s"},' \
+    "$(json_escape "${CTID}")" \
+    "$(json_escape "${NODE_HOSTNAME}")"
+printf '"manager":{"ip":"%s","port":2377,"node_id":%s,"labels":"%s","labels_list":%s},' \
+    "$(json_escape "${ADVERTISE_ADDR}")" \
+    "$(json_str_or_null "${NODE_ID:-}")" \
+    "$(json_escape "${NODE_LABELS}")" \
+    "${LABELS_JSON}"
+printf '"pool":{"overlay":"%s","mask":%s},' \
+    "$(json_escape "${POOL_OVERLAY}")" \
+    "${POOL_MASK}"
+printf '"tokens":{"worker":"%s","manager":"%s","file":"%s"},' \
+    "$(json_escape "${WORKER_TOKEN}")" \
+    "$(json_escape "${MANAGER_TOKEN}")" \
+    "$(json_escape "${TOKEN_FILE}")"
+printf '"join_commands":{"worker":"%s","manager":"%s"},' \
+    "$(json_escape "${JOIN_WORKER_CMD}")" \
+    "$(json_escape "${JOIN_MANAGER_CMD}")"
+printf '"docker_config":{"live_restore_was_on":%s,"live_restore_fixed":%s},' \
+    "${LIVE_RESTORE_WAS_ON_BOOL}" \
+    "${LIVE_RESTORE_FIXED_BOOL}"
+printf '"previous_state":{"swarm_state":"%s","force_used":%s},' \
+    "$(json_escape "${SWARM_STATE}")" \
+    "${FORCE_USED_BOOL}"
+printf '"host":{"proxmox_host":"%s","created_at":"%s","script_version":"%s","conf_path":"%s"}' \
+    "$(json_escape "${PROXMOX_HOST}")" \
+    "${CREATED_AT}" \
+    "$(json_escape "${SCRIPT_VERSION}")" \
+    "$(json_escape "${CONF}")"
+printf '}\n'
+
+exit 0

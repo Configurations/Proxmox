@@ -99,6 +99,10 @@ SSH_KEY_DIR="${SSH_KEY_DIR:-/root/.ssh/lxc-keys}"
 # Marge de securite : on ne creera pas un disque qui remplirait le pool a +X%
 SAFETY_MARGIN_GB="${SAFETY_MARGIN_GB:-5}"
 
+# Defaults pour les variables capturees pendant l'execution (utilisees dans le JSON final)
+CONF_BACKUP_PATH=""
+DOCKER_HELLO_OK=0
+
 if [ -z "${CTID}" ]; then
     echo "Usage : $0 <CTID> [hostname] [--swarm]"
     echo ""
@@ -438,8 +442,9 @@ else
 
     # ── Backup ───────────────────────────────────────────────────────────────
     echo "[2/6] Backup de la configuration..."
-    cp "${CONF}" "${CONF}.backup.$(date +%Y%m%d%H%M%S)"
-    echo "  -> Backup : ${CONF}.backup.*"
+    CONF_BACKUP_PATH="${CONF}.backup.$(date +%Y%m%d%H%M%S)"
+    cp "${CONF}" "${CONF_BACKUP_PATH}"
+    echo "  -> Backup : ${CONF_BACKUP_PATH}"
 
     # ── Lire les parametres existants ────────────────────────────────────────
     echo "[3/6] Lecture des parametres existants..."
@@ -756,8 +761,10 @@ if pct exec "${CTID}" -- bash -c "command -v docker >/dev/null && docker info >/
     echo "  -> Docker daemon : OK (operationnel)"
 
     if pct exec "${CTID}" -- docker run --rm hello-world >/dev/null 2>&1; then
+        DOCKER_HELLO_OK=1
         echo "  -> Docker run    : OK (test hello-world reussi)"
     else
+        DOCKER_HELLO_OK=0
         echo "  -> Docker run    : ECHEC (probleme reseau ou pull registry)"
     fi
 else
@@ -846,9 +853,9 @@ fi
 " 2>/dev/null || echo "unknown")
 
 # Verification finale Swarm-ready
+TUN_OK=$(pct exec "${CTID}" -- bash -c "[ -c /dev/net/tun ] && echo yes || echo no" 2>/dev/null || echo "no")
 SWARM_READY="false"
 if [ "${SWARM_MODE}" -eq 1 ]; then
-    TUN_OK=$(pct exec "${CTID}" -- bash -c "[ -c /dev/net/tun ] && echo yes || echo no" 2>/dev/null || echo "no")
     if [ "${TUN_OK}" = "yes" ] && [ "${DOCKER_OK}" -eq 1 ]; then
         SWARM_READY="true"
     fi
@@ -924,10 +931,82 @@ echo "==========================================="
 echo ""
 
 # ── Sortie JSON (convention pipeline agflow) ─────────────────────────────────
-echo "{\"status\":\"$([ ${DOCKER_OK} -eq 1 ] && echo ok || echo partial)\",\"ctid\":\"${CTID}\",\"ip\":\"${CT_IP}\",\"ip_type\":\"${IP_TYPE}\",\"distro\":\"${CT_DISTRO}\",\"user\":\"agflow\",\"password\":\"${AGFLOW_PASS}\",\"ssh_key\":\"${AGFLOW_KEY_FILE}\",\"docker\":\"${docker_version}\",\"docker_ok\":${DOCKER_OK},\"storage\":\"${STORAGE}\",\"swarm_mode\":${SWARM_MODE},\"swarm_ready\":${SWARM_READY}}"
+# Helpers JSON : escape des valeurs (backslash, quote, controles) et null si vide
+json_escape() {
+    local s="${1:-}"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+json_str_or_null() {
+    if [ -z "${1:-}" ]; then
+        printf 'null'
+    else
+        printf '"%s"' "$(json_escape "$1")"
+    fi
+}
 
-# Code de sortie : 0 si tout OK, 2 si Docker pas operationnel mais LXC cree
-if [ "${DOCKER_OK}" -eq 0 ]; then
-    exit 2
+# Contexte hote / horodatage
+PROXMOX_HOST=$(hostname -f 2>/dev/null || hostname 2>/dev/null || echo "unknown")
+CREATED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+SCRIPT_VERSION="unknown"
+if [ -n "${SCRIPT_DIR:-}" ]; then
+    SCRIPT_VERSION=$(git -C "${SCRIPT_DIR}" rev-parse --short HEAD 2>/dev/null || echo "unknown")
 fi
-exit 0
+
+# Statut global et code de sortie
+if [ "${DOCKER_OK}" -eq 1 ]; then
+    OVERALL_STATUS="ok"
+    EXIT_CODE=0
+else
+    OVERALL_STATUS="partial"
+    EXIT_CODE=2
+fi
+
+# Booleen JSON pour hello-world
+DOCKER_HELLO_BOOL=$([ "${DOCKER_HELLO_OK}" -eq 1 ] && echo true || echo false)
+
+# JSON sur une seule ligne (compat pipeline agflow)
+printf '{'
+printf '"status":"%s",' "${OVERALL_STATUS}"
+printf '"exit_code":%s,' "${EXIT_CODE}"
+printf '"identification":{"ctid":"%s","hostname":"%s","hostname_raw":"%s"},' \
+    "$(json_escape "${CTID}")" \
+    "$(json_escape "${CT_NAME}")" \
+    "$(json_escape "${CT_NAME_RAW}")"
+printf '"ressources":{"storage":"%s"},' \
+    "$(json_escape "${STORAGE}")"
+printf '"systeme":{"distro":"%s","ip":"%s","ip_type":"%s"},' \
+    "$(json_escape "${CT_DISTRO}")" \
+    "$(json_escape "${CT_IP}")" \
+    "$(json_escape "${IP_TYPE}")"
+printf '"ssh_root":{"private_key_path":"%s","public_key_path":"%s","public_key":"%s","login_method":"key-only"},' \
+    "$(json_escape "${KEY_FILE}")" \
+    "$(json_escape "${KEY_FILE}.pub")" \
+    "$(json_escape "${PUB_KEY}")"
+printf '"users":[{"user":"agflow","password":"%s","ssh_key_private_path":"%s","ssh_key_public_path":"%s","ssh_key_public":"%s","groups":["sudo","docker"],"sudo_nopasswd":true}],' \
+    "$(json_escape "${AGFLOW_PASS}")" \
+    "$(json_escape "${AGFLOW_KEY_FILE}")" \
+    "$(json_escape "${AGFLOW_KEY_FILE}.pub")" \
+    "$(json_escape "${AGFLOW_PUB_KEY}")"
+printf '"docker":{"docker_ok":%s,"docker_version":"%s","compose_version":"%s","hello_world_ok":%s},' \
+    "${DOCKER_OK}" \
+    "$(json_escape "${docker_version}")" \
+    "$(json_escape "${compose_version}")" \
+    "${DOCKER_HELLO_BOOL}"
+printf '"swarm":{"swarm_mode":%s,"swarm_ready":%s,"tun_device_present":"%s"},' \
+    "${SWARM_MODE}" \
+    "${SWARM_READY}" \
+    "$(json_escape "${TUN_OK}")"
+printf '"host":{"proxmox_host":"%s","created_at":"%s","script_version":"%s","conf_path":"%s","conf_backup_path":%s}' \
+    "$(json_escape "${PROXMOX_HOST}")" \
+    "${CREATED_AT}" \
+    "$(json_escape "${SCRIPT_VERSION}")" \
+    "$(json_escape "${CONF}")" \
+    "$(json_str_or_null "${CONF_BACKUP_PATH}")"
+printf '}\n'
+
+exit "${EXIT_CODE}"
