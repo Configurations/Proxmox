@@ -1,0 +1,25 @@
+{
+  "args": [
+    {
+      "arg": "LXC_ID",
+      "label_fr": "Identifiant LXC (CT ID)",
+      "description_fr": "Numéro unique du container (ex: 200, 201…)",
+      "type": "integer",
+      "required": true,
+      "default": 301,
+      "min": 100,
+      "max": 999
+    },
+    {
+      "arg": "LXC_NAME",
+      "label_fr": "Nom du container",
+      "description_fr": "Hostname DNS (lettres, chiffres, tirets — ex: agflow-test-01)",
+      "type": "string",
+      "required": true,
+      "default": "ag-swarm-1",
+      "pattern": "^[a-zA-Z0-9-]+$"
+    }
+  ],
+  "command": "mkdir -p /root/lxc && cd /root/lxc && curl -fsSL -o 00-create-lxc-swarm.sh https://raw.githubusercontent.com/Configurations/Proxmox/main/LXC/00-create-lxc-swarm.sh && curl -fsSL -o 01-install-docker.sh https://raw.githubusercontent.com/Configurations/Proxmox/main/LXC/01-install-docker.sh && chmod +x *.sh && STORAGE=extended-lvm DISK_SIZE=50 ./00-create-lxc-swarm.sh {LXC_ID} {LXC_NAME} --swarm",
+  "tags":["add_node"]
+}
