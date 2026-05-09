@@ -2,9 +2,9 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agflow.docker/schemas/script-manifest.json",
   "title": "Script Manifest",
-  "description": "Manifest JSON pour les scripts d'infrastructure agflow. Définit les arguments attendus et la commande à exécuter via SSH.",
+  "description": "Manifest JSON pour les scripts d'infrastructure agflow. Définit les arguments attendus, la liste de commandes à exécuter via SSH, et les tags de catégorisation.",
   "type": "object",
-  "required": ["args", "command"],
+  "required": ["args", "commands"],
   "additionalProperties": false,
   "properties": {
     "args": {
@@ -51,10 +51,12 @@
           },
           "options": {
             "type": "array",
-            "description": "Choix possibles (si type=select)",
+            "description": "Choix possibles (obligatoire si type=select)",
+            "minItems": 1,
             "items": {
               "type": "object",
               "required": ["value", "label"],
+              "additionalProperties": false,
               "properties": {
                 "value": { "type": "string" },
                 "label": { "type": "string" }
@@ -73,13 +75,45 @@
             "type": "integer",
             "description": "Valeur maximale (si type=integer)"
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "type": { "const": "select" } }, "required": ["type"] },
+            "then": { "required": ["options"] }
+          },
+          {
+            "if": { "properties": { "type": { "const": "string" } }, "required": ["type"] },
+            "then": { "not": { "anyOf": [ { "required": ["min"] }, { "required": ["max"] }, { "required": ["options"] } ] } }
+          },
+          {
+            "if": { "properties": { "type": { "const": "integer" } }, "required": ["type"] },
+            "then": { "not": { "anyOf": [ { "required": ["pattern"] }, { "required": ["options"] } ] } }
+          },
+          {
+            "if": { "properties": { "type": { "const": "boolean" } }, "required": ["type"] },
+            "then": { "not": { "anyOf": [ { "required": ["pattern"] }, { "required": ["min"] }, { "required": ["max"] }, { "required": ["options"] } ] } }
+          }
+        ]
       }
     },
-    "command": {
-      "type": "string",
-      "minLength": 1,
-      "description": "Commande à exécuter via SSH. Les placeholders {ARG} sont remplacés par les valeurs saisies."
+    "commands": {
+      "type": "array",
+      "description": "Liste ordonnée de commandes shell à exécuter via SSH dans le même contexte. Les placeholders {ARG} sont remplacés par les valeurs saisies.",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "tags": {
+      "type": "array",
+      "description": "Tags de catégorisation utilisés par l'UI pour filtrer/grouper les scripts (ex: 'create_lxc', 'create_vm', 'docker', 'swarm', 'add_node').",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[a-z0-9_]+$"
+      },
+      "uniqueItems": true
     }
   }
 }

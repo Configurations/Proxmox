@@ -24,23 +24,6 @@
       "pattern": "^[a-zA-Z0-9-]+$"
     },
     {
-      "arg": "MODE",
-      "label_fr": "Mode de configuration",
-      "label_en": "Configuration mode",
-      "description_fr": "Choix du mode de la VM. 'bare' = VM nue. 'docker' = VM + Docker. 'swarm' = VM swarm-ready (sysctl, sans Docker). 'init-swarm' = VM + Docker + initialise un nouveau cluster Swarm. 'join-swarm' = VM + Docker + rejoint un cluster existant (renseigner MANAGER_IP et JOIN_TOKEN).",
-      "description_en": "VM mode selection. 'bare' = bare VM. 'docker' = VM + Docker. 'swarm' = swarm-ready VM (no Docker). 'init-swarm' = VM + Docker + init new Swarm cluster. 'join-swarm' = VM + Docker + join existing cluster (set MANAGER_IP and JOIN_TOKEN).",
-      "type": "select",
-      "required": true,
-      "default": "init-swarm",
-      "options": [
-        { "value": "bare",       "label": "VM nue (sans Docker, sans Swarm)" },
-        { "value": "docker",     "label": "VM + Docker" },
-        { "value": "swarm",      "label": "VM swarm-ready (sans Docker)" },
-        { "value": "init-swarm", "label": "VM + Docker + init nouveau cluster Swarm" },
-        { "value": "join-swarm", "label": "VM + Docker + rejoindre cluster Swarm existant" }
-      ]
-    },
-    {
       "arg": "STORAGE",
       "label_fr": "Storage Proxmox",
       "label_en": "Proxmox storage",
@@ -115,58 +98,14 @@
       "type": "string",
       "required": false,
       "default": "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
-    },
-    {
-      "arg": "MANAGER_IP",
-      "label_fr": "IP du manager Swarm",
-      "label_en": "Swarm manager IP",
-      "description_fr": "Uniquement si MODE=join-swarm. IP d'un manager Swarm existant (sans port).",
-      "description_en": "Only if MODE=join-swarm. IP of an existing Swarm manager (no port).",
-      "type": "string",
-      "required": false,
-      "default": ""
-    },
-    {
-      "arg": "JOIN_TOKEN",
-      "label_fr": "Token de join Swarm",
-      "label_en": "Swarm join token",
-      "description_fr": "Uniquement si MODE=join-swarm. Token worker ou manager du cluster existant.",
-      "description_en": "Only if MODE=join-swarm. Worker or manager token from the existing cluster.",
-      "type": "string",
-      "required": false,
-      "default": ""
-    },
-    {
-      "arg": "JOIN_AS_MANAGER",
-      "label_fr": "Rejoindre comme manager",
-      "label_en": "Join as manager",
-      "description_fr": "Uniquement si MODE=join-swarm. Si true, le node rejoint comme manager (HA). Sinon comme worker.",
-      "description_en": "Only if MODE=join-swarm. If true, node joins as manager (HA). Otherwise as worker.",
-      "type": "boolean",
-      "required": false,
-      "default": false
-    },
-    {
-      "arg": "POOL_OVERLAY",
-      "label_fr": "Pool overlay Swarm (CIDR)",
-      "label_en": "Swarm overlay pool (CIDR)",
-      "description_fr": "Uniquement pour MODE=init-swarm. Pool d'IPs des overlay networks. Choisir un subnet qui ne chevauche pas le LAN.",
-      "description_en": "Only for MODE=init-swarm. IP pool for overlay networks. Pick a subnet that does not overlap the LAN.",
-      "type": "string",
-      "required": false,
-      "default": "10.20.0.0/16"
-    },
-    {
-      "arg": "NODE_LABELS",
-      "label_fr": "Labels du node Swarm",
-      "label_en": "Swarm node labels",
-      "description_fr": "Uniquement pour MODE=init-swarm. Labels appliqués au manager initial, format clé=valeur séparé par virgule.",
-      "description_en": "Only for MODE=init-swarm. Labels applied to the initial manager, comma-separated key=value pairs.",
-      "type": "string",
-      "required": false,
-      "default": "role=control,tenant=agflow"
     }
   ],
-  "command": "mkdir -p /root/vm && cd /root/vm && curl -fsSL -o create-vm.sh https://raw.githubusercontent.com/Configurations/Proxmox/main/LXC/create-vm.sh && chmod +x create-vm.sh && FLAGS=''; case '{MODE}' in docker) FLAGS='--docker' ;; swarm) FLAGS='--swarm' ;; init-swarm) FLAGS='--init-swarm' ;; join-swarm) FLAGS='--join-swarm --manager-ip {MANAGER_IP} --token {JOIN_TOKEN}' ;; esac; [ '{JOIN_AS_MANAGER}' = 'true' ] && FLAGS=\"$FLAGS --as-manager\"; STORAGE='{STORAGE}' DISK_SIZE={DISK_SIZE} CORES={CORES} MEMORY={MEMORY} BRIDGE='{BRIDGE}' CLOUD_IMG_NAME='{CLOUD_IMG_NAME}' CLOUD_IMG_URL='{CLOUD_IMG_URL}' POOL_OVERLAY='{POOL_OVERLAY}' NODE_LABELS='{NODE_LABELS}' ./create-vm.sh {VM_ID} '{VM_NAME}' $FLAGS",
-  "tags": ["add_node", "create_vm"]
+  "commands": [
+    "mkdir -p /root/vm",
+    "cd /root/vm",
+    "curl -fsSL -o create-vm.sh https://raw.githubusercontent.com/Configurations/Proxmox/main/LXC/create-vm.sh",
+    "chmod +x create-vm.sh",
+    "STORAGE='{STORAGE}' DISK_SIZE={DISK_SIZE} CORES={CORES} MEMORY={MEMORY} BRIDGE='{BRIDGE}' CLOUD_IMG_NAME='{CLOUD_IMG_NAME}' CLOUD_IMG_URL='{CLOUD_IMG_URL}' ./create-vm.sh {VM_ID} '{VM_NAME}'"
+  ],
+  "tags": ["create_vm"]
 }

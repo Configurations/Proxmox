@@ -20,7 +20,7 @@
       "description_en": "DNS hostname (letters, digits, dashes — e.g. agflow-test-01)",
       "type": "string",
       "required": true,
-      "default": "ag-lxc-1",
+      "default": "ag-docker-1",
       "pattern": "^[a-zA-Z0-9-]+$"
     },
     {
@@ -97,7 +97,7 @@
     "cd /root/lxc",
     "curl -fsSL -o create-lxc.sh https://raw.githubusercontent.com/Configurations/Proxmox/main/LXC/create-lxc.sh",
     "chmod +x create-lxc.sh",
-    "STORAGE='{STORAGE}' DISK_SIZE={DISK_SIZE} CORES={CORES} MEMORY={MEMORY} SWAP={SWAP} BRIDGE='{BRIDGE}' ./create-lxc.sh {LXC_ID} '{LXC_NAME}'"
+    "STORAGE='{STORAGE}' DISK_SIZE={DISK_SIZE} CORES={CORES} MEMORY={MEMORY} SWAP={SWAP} BRIDGE='{BRIDGE}' ./create-lxc.sh {LXC_ID} '{LXC_NAME}' --docker"
   ],
   "tags": ["create_lxc"]
 }
