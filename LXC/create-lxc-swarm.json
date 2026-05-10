@@ -27,11 +27,15 @@
       "arg": "STORAGE",
       "label_fr": "Storage Proxmox",
       "label_en": "Proxmox storage",
-      "description_fr": "Nom du pool storage pour le rootfs. 'auto' sélectionne automatiquement celui avec le plus d'espace libre.",
-      "description_en": "Proxmox storage pool for the rootfs. 'auto' picks the one with most free space.",
-      "type": "string",
+      "description_fr": "Pool storage pour le rootfs LXC. 'auto' = sélection auto (storage actif compatible 'rootdir' avec le plus d'espace libre). Liste dynamique via 'pvesm status'.",
+      "description_en": "Storage pool for the LXC rootfs. 'auto' = auto-pick (active 'rootdir'-capable storage with most free space). Dynamic list via 'pvesm status'.",
+      "type": "select",
       "required": false,
-      "default": "auto"
+      "default": "auto",
+      "options": [
+        { "value": "auto", "label": "auto (sélection automatique)" }
+      ],
+      "option_script": "pvesm status --content rootdir | awk 'NR>1 && $3==\"active\" {print $1}'"
     },
     {
       "arg": "DISK_SIZE",
