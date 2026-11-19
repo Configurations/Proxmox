@@ -886,8 +886,9 @@ echo '  -> sudo NOPASSWD configure'
 
 # ══════════════════════════════════════════════════════════════════════════════
 # INSTALLATION DOCKER (si --docker)
-# Le contenu de 01-install-docker.sh est inline ci-dessous, sans la duplication
-# de openssh-server / apt update / unattended-upgrades (deja faits ci-dessus).
+# Installation inline : repository officiel Docker, daemon.json, verification
+# espace disque. openssh-server / apt update / unattended-upgrades sont deja
+# faits ci-dessus.
 # ══════════════════════════════════════════════════════════════════════════════
 if [ "${DOCKER_MODE}" -eq 1 ]; then
     echo ""

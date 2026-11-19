@@ -106,7 +106,7 @@ L'image Docker est pinnée à `grafana/alloy:v1.5.1`. **Pas de `:latest`** pour 
 
 ### `unattended-upgrades` exclu pour Docker
 
-Le script `01-install-docker.sh` configure `unattended-upgrades` mais **exclut explicitement** `docker-ce`, `docker-ce-cli` et `containerd.io`. Raison : Docker a son propre cycle de release, pas synchronisé avec les patchs de sécurité Ubuntu. Mieux vaut un upgrade Docker piloté manuellement (testable) qu'automatique.
+Le script `create-lxc.sh` configure `unattended-upgrades` mais **exclut explicitement** `docker-ce`, `docker-ce-cli` et `containerd.io`. Raison : Docker a son propre cycle de release, pas synchronisé avec les patchs de sécurité Ubuntu. Mieux vaut un upgrade Docker piloté manuellement (testable) qu'automatique.
 
 ## Customisation
 

@@ -37,8 +37,8 @@ Stack centralisée d'observabilité (logs) déployée sur le LXC `agflow-logs` (
 
 ## Pré-requis
 
-- LXC 116 créé via `../00-create-lxc-swarm.sh 116 agflow-logs` (sans `--swarm`)
-- Docker et Docker Compose plugin installés (gérés par `01-install-docker.sh`)
+- LXC 116 créé via `../create-lxc.sh 116 agflow-logs --docker` (sans `--swarm`)
+- Docker et Docker Compose plugin installés (gérés par `create-lxc.sh --docker`)
 - DNS résolvant `logs.example.org` (ou un nom équivalent) vers le tunnel Cloudflare
 - Tunnel Cloudflare configuré pour pointer vers `http://<IP_LXC_116>:80`
 
