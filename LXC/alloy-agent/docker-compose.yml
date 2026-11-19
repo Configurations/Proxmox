@@ -3,6 +3,8 @@
 # Variables d'env attendues dans .env :
 #   LOKI_URL  — endpoint Loki, ex: http://192.168.10.<IP_LXC116>:3100/loki/api/v1/push
 #   HOSTNAME  — identifiant de l'hôte (label `host`), ex: lxc201
+#   MODULE    — optionnel, label `module` (ex: agflow). Défaut : none
+#   ROLE      — optionnel, label `role` (ex: manager, worker). Défaut : none
 #
 # Mounts en lecture seule :
 #   - socket Docker pour discovery + lecture des logs containers
@@ -25,6 +27,8 @@ services:
     environment:
       LOKI_URL: ${LOKI_URL:?LOKI_URL is required}
       HOSTNAME: ${HOSTNAME:?HOSTNAME is required}
+      MODULE: ${MODULE:-}
+      ROLE: ${ROLE:-}
     volumes:
       - ./config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro

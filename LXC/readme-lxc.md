@@ -44,8 +44,20 @@ the previous `00-create-lxc.sh` + `00-create-lxc-swarm.sh` +
 | `--swarm` | Prepares the LXC swarm-ready (host kernel modules, `/dev/net/tun`, sysctls, `swarm-ready` tag) |
 | `--init-swarm` | Initializes a new Swarm cluster (implies `--docker` + `--swarm`) |
 | `--join-swarm --manager-ip <IP> --token <TOKEN> [--as-manager]` | Joins an existing cluster (implies `--docker` + `--swarm`) |
+| `--app <name>` | Deploys an app after creation (repeatable). Supported apps: `alloy` |
 
 `--init-swarm` and `--join-swarm` are mutually exclusive.
+
+### Deployable apps (`--app`)
+
+| App | Description | Variables |
+|---|---|---|
+| `alloy` (v3) | Grafana Alloy log collector: collects the host's Docker and journald logs and pushes them to Loki (`host`/`module`/`role` labels). docker-compose mode when Docker is present, Debian package + systemd otherwise. | `LOKI_URL` (required), `MODULE`, `ROLE`, `ALLOY_HOSTNAME` (default `lxc<CTID>`), `STRICT_CHECKS` |
+
+```bash
+LOKI_URL=http://192.168.10.116:3100/loki/api/v1/push \
+  MODULE=agflow ROLE=worker ./create-lxc.sh 205 ag-app --docker --app alloy
+```
 
 ### Auto behaviors
 
@@ -65,9 +77,9 @@ the previous `00-create-lxc.sh` + `00-create-lxc-swarm.sh` +
   `live-restore=true` (incompatible with Swarm) when `AUTO_FIX=1`
   (default).
 - **JSON output** — single aggregated final block:
-  `{"status", "exit_code", "machine":{...}, "docker":{...}, "swarm":{...}}`.
+  `{"status", "exit_code", "machine":{...}, "docker":{...}, "swarm":{...}, "apps":[...]}`.
   `docker` block present only with `--docker`, `swarm` block only with
-  `--init-swarm`/`--join-swarm`.
+  `--init-swarm`/`--join-swarm`, `apps` block only with `--app`.
 
 ### Generated artifacts
 
@@ -99,6 +111,11 @@ the previous `00-create-lxc.sh` + `00-create-lxc-swarm.sh` +
 | `FORCE` | `0` | reset Swarm before re-init (**destructive**) |
 | `FORCE_LEAVE` | `no` | leave current Swarm before joining |
 | `AUTO_FIX` | `1` | auto-fix live-restore=true |
+| `LOKI_URL` | — | Loki endpoint (required with `--app alloy`) |
+| `MODULE` | *(empty)* | `module` label on logs (`--app alloy`) |
+| `ROLE` | *(empty)* | `role` label on logs (`--app alloy`) |
+| `ALLOY_HOSTNAME` | `lxc<CTID>` | `host` label on logs (`--app alloy`) |
+| `STRICT_CHECKS` | `0` | if `1`, fail when Loki is unreachable (`--app alloy`) |
 
 ### Prerequisites (creation)
 

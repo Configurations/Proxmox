@@ -45,8 +45,20 @@ Bootstrap pattern:
 | `--swarm` | Prepares the VM swarm-ready (sysctls + tag — no `/dev/net/tun` bind, no host kernel modules: VM is self-contained) |
 | `--init-swarm` | Initializes a new Swarm cluster (implies `--docker` + `--swarm`) |
 | `--join-swarm --manager-ip <IP> --token <TOKEN> [--as-manager]` | Joins an existing cluster (implies `--docker` + `--swarm`) |
+| `--app <name>` | Deploys an app after creation (repeatable). Supported apps: `alloy` |
 
 `--init-swarm` and `--join-swarm` are mutually exclusive.
+
+### Deployable apps (`--app`)
+
+| App | Description | Variables |
+|---|---|---|
+| `alloy` (v3) | Grafana Alloy log collector: collects the host's Docker and journald logs and pushes them to Loki (`host`/`module`/`role` labels). docker-compose mode when Docker is present, Debian package + systemd otherwise. | `LOKI_URL` (required), `MODULE`, `ROLE`, `ALLOY_HOSTNAME` (default `vm<VMID>`), `STRICT_CHECKS` |
+
+```bash
+LOKI_URL=http://192.168.10.116:3100/loki/api/v1/push \
+  MODULE=agflow ROLE=worker ./create-vm.sh 105 ag-app --docker --app alloy
+```
 
 ### Differences vs `create-lxc.sh`
 
@@ -79,7 +91,8 @@ Bootstrap pattern:
 - **Live-restore auto-fix** — `--init-swarm` detects and corrects
   `live-restore=true` (incompatible with Swarm) when `AUTO_FIX=1`.
 - **JSON output** — single aggregated block:
-  `{"status", "exit_code", "machine":{...,"cloud_init":{...}}, "docker":{...}, "swarm":{...}}`.
+  `{"status", "exit_code", "machine":{...,"cloud_init":{...}}, "docker":{...}, "swarm":{...}, "apps":[...]}`.
+  `apps` block present only with `--app`.
 
 ### Generated artifacts
 
@@ -117,6 +130,11 @@ Bootstrap pattern:
 | `FORCE` | `0` | reset Swarm before re-init (**destructive**) |
 | `FORCE_LEAVE` | `no` | leave current Swarm before joining |
 | `AUTO_FIX` | `1` | auto-fix live-restore=true |
+| `LOKI_URL` | — | Loki endpoint (required with `--app alloy`) |
+| `MODULE` | *(empty)* | `module` label on logs (`--app alloy`) |
+| `ROLE` | *(empty)* | `role` label on logs (`--app alloy`) |
+| `ALLOY_HOSTNAME` | `vm<VMID>` | `host` label on logs (`--app alloy`) |
+| `STRICT_CHECKS` | `0` | if `1`, fail when Loki is unreachable (`--app alloy`) |
 
 ### Prerequisites
 

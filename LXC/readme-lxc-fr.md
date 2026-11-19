@@ -44,8 +44,20 @@ initialise un cluster ou en rejoint un. Remplace les anciens
 | `--swarm` | Prépare le LXC swarm-ready (modules kernel hôte, `/dev/net/tun`, sysctls, tag `swarm-ready`) |
 | `--init-swarm` | Initialise un nouveau cluster Swarm (implique `--docker` + `--swarm`) |
 | `--join-swarm --manager-ip <IP> --token <TOKEN> [--as-manager]` | Rejoint un cluster existant (implique `--docker` + `--swarm`) |
+| `--app <nom>` | Déploie une app après création (répétable). Apps supportées : `alloy` |
 
 `--init-swarm` et `--join-swarm` sont mutuellement exclusifs.
+
+### Apps déployables (`--app`)
+
+| App | Description | Variables |
+|---|---|---|
+| `alloy` (v3) | Collecteur de logs Grafana Alloy : collecte les logs Docker et journald du host et les pousse vers Loki (labels `host`/`module`/`role`). Mode docker-compose si Docker est présent, sinon paquet Debian + systemd. | `LOKI_URL` (requis), `MODULE`, `ROLE`, `ALLOY_HOSTNAME` (défaut `lxc<CTID>`), `STRICT_CHECKS` |
+
+```bash
+LOKI_URL=http://192.168.10.116:3100/loki/api/v1/push \
+  MODULE=agflow ROLE=worker ./create-lxc.sh 205 ag-app --docker --app alloy
+```
 
 ### Comportements automatiques
 
@@ -65,9 +77,10 @@ initialise un cluster ou en rejoint un. Remplace les anciens
 - **Auto-fix live-restore** — `--init-swarm` détecte et corrige
   `live-restore=true` (incompatible Swarm) si `AUTO_FIX=1` (défaut).
 - **Sortie JSON** — un seul bloc final agrégé :
-  `{"status", "exit_code", "machine":{...}, "docker":{...}, "swarm":{...}}`.
+  `{"status", "exit_code", "machine":{...}, "docker":{...}, "swarm":{...}, "apps":[...]}`.
   Bloc `docker` présent uniquement avec `--docker`, bloc `swarm`
-  uniquement avec `--init-swarm`/`--join-swarm`.
+  uniquement avec `--init-swarm`/`--join-swarm`, bloc `apps`
+  uniquement avec `--app`.
 
 ### Artefacts générés
 
@@ -99,6 +112,11 @@ initialise un cluster ou en rejoint un. Remplace les anciens
 | `FORCE` | `0` | reset du Swarm avant re-init (**destructif**) |
 | `FORCE_LEAVE` | `no` | quitte le Swarm courant avant join |
 | `AUTO_FIX` | `1` | corrige automatiquement `live-restore=true` |
+| `LOKI_URL` | — | endpoint Loki (requis avec `--app alloy`) |
+| `MODULE` | *(vide)* | label `module` des logs (`--app alloy`) |
+| `ROLE` | *(vide)* | label `role` des logs (`--app alloy`) |
+| `ALLOY_HOSTNAME` | `lxc<CTID>` | label `host` des logs (`--app alloy`) |
+| `STRICT_CHECKS` | `0` | si `1`, échec si Loki injoignable (`--app alloy`) |
 
 ### Pré-requis (création)
 

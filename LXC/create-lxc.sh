@@ -21,6 +21,14 @@
 #       --manager-ip <IP>     IP du manager (obligatoire avec --join-swarm)
 #       --token <TOKEN>       Token de join (obligatoire avec --join-swarm)
 #       --as-manager          Rejoindre comme manager (defaut : worker)
+#   --app <nom>               Deploie une app dans le LXC apres creation
+#                             (repetable). Apps supportees :
+#                             - alloy (v3) : collecteur de logs Grafana Alloy.
+#                               Collecte les logs Docker et journald du host et
+#                               les pousse vers Loki. Variables : LOKI_URL
+#                               (requis), MODULE, ROLE, ALLOY_HOSTNAME.
+#                               Fonctionne avec ou sans --docker (mode compose
+#                               si Docker present, sinon paquet + systemd).
 #
 # --init-swarm et --join-swarm sont mutuellement exclusifs.
 # Sans aucun flag : LXC nu, aucune optimisation Docker/Swarm.
@@ -35,6 +43,8 @@
 #   ./create-lxc.sh 203 ag-worker --join-swarm --manager-ip 192.168.10.115 \
 #                                 --token SWMTKN-1-xxx
 #   STORAGE=extended-lvm DISK_SIZE=50 ./create-lxc.sh 204 ag-data --init-swarm
+#   LOKI_URL=http://192.168.10.116:3100/loki/api/v1/push \
+#     MODULE=agflow ROLE=worker ./create-lxc.sh 205 ag-app --docker --app alloy
 #
 # Variables d'environnement :
 #   STORAGE=auto          Selection auto du storage (defaut)
@@ -57,6 +67,12 @@
 #   AUTO_FIX=1                       Correction auto live-restore
 #   TOKEN_DIR=...                    Dossier des tokens Swarm
 #   MIN_FREE_MB=1024                 Espace min dans le LXC (Docker)
+#   LOKI_URL=...                     Endpoint Loki (requis avec --app alloy)
+#   MODULE=...                       Label `module` des logs (--app alloy)
+#   ROLE=...                         Label `role` des logs (--app alloy)
+#   ALLOY_HOSTNAME=...               Label `host` des logs (defaut : lxc<CTID>)
+#   STRICT_CHECKS=0                  Si 1, echec si Loki injoignable (--app alloy)
+#   REPO_RAW_URL=...                 URL raw du repo (fichiers app si pas en local)
 #
 # Pre-requis (creation) : un template Ubuntu dans le storage local.
 #   pveam update
@@ -128,6 +144,15 @@ AUTO_FIX="${AUTO_FIX:-1}"
 LISTEN_ADDR_JOIN="${LISTEN_ADDR:-0.0.0.0:2377}"
 FORCE_LEAVE="${FORCE_LEAVE:-no}"
 
+# Apps deployables (--app)
+SUPPORTED_APPS="alloy"
+REPO_RAW_URL="${REPO_RAW_URL:-https://github.com/Configurations/Proxmox/raw/main/LXC}"
+LOKI_URL="${LOKI_URL:-}"
+MODULE="${MODULE:-}"
+ROLE="${ROLE:-}"
+ALLOY_HOSTNAME="${ALLOY_HOSTNAME:-}"
+STRICT_CHECKS="${STRICT_CHECKS:-0}"
+
 # Etat capture (pour JSON final)
 CONF_BACKUP_PATH=""
 DOCKER_HELLO_OK=0
@@ -147,6 +172,9 @@ JOIN_NEW_STATE=""
 JOIN_NEW_ROLE=""
 JOIN_NODE_ID=""
 ADVERTISE_ADDR_USED=""
+APPS_FAILED=0
+ALLOY_OK=0
+ALLOY_HOST_LABEL=""
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Parsing des arguments
@@ -158,6 +186,7 @@ JOIN_SWARM=0
 JOIN_AS_MANAGER=0
 JOIN_MANAGER_IP=""
 JOIN_TOKEN=""
+APPS=()
 ARGS=()
 
 while [ $# -gt 0 ]; do
@@ -169,6 +198,7 @@ while [ $# -gt 0 ]; do
         --as-manager)   JOIN_AS_MANAGER=1 ;;
         --manager-ip)   JOIN_MANAGER_IP="${2:-}"; shift ;;
         --token)        JOIN_TOKEN="${2:-}"; shift ;;
+        --app)          APPS+=("${2:-}"); shift ;;
         *)              ARGS+=("$1") ;;
     esac
     shift
@@ -193,6 +223,21 @@ if [ "${JOIN_SWARM}" -eq 1 ]; then
     fi
 fi
 
+# Validation des apps demandees (--app)
+for app in "${APPS[@]}"; do
+    case "${app}" in
+        alloy)
+            if [ -z "${LOKI_URL}" ]; then
+                fail "--app alloy requiert LOKI_URL" \
+                     "Ex : LOKI_URL=http://192.168.10.116:3100/loki/api/v1/push"
+            fi
+            ;;
+        *)
+            fail "App inconnue : '${app}'" "Apps supportees : ${SUPPORTED_APPS}"
+            ;;
+    esac
+done
+
 CTID="${1:-}"
 CT_NAME_RAW="${2:-agflow-docker}"
 CT_NAME=$(echo "${CT_NAME_RAW}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
@@ -209,6 +254,9 @@ Flags :
       --manager-ip <IP>     IP du manager (obligatoire avec --join-swarm)
       --token <TOKEN>       Token de join (obligatoire avec --join-swarm)
       --as-manager          Rejoindre comme manager (defaut : worker)
+  --app <nom>               Deploie une app apres creation (repetable)
+                            Apps : alloy (collecteur de logs -> Loki ;
+                            requiert LOKI_URL, options MODULE/ROLE)
 
 Sans flag : LXC nu (pas de Docker, pas de Swarm).
 
@@ -416,6 +464,7 @@ fi
 [ "${SWARM_MODE}" -eq 1 ] && echo "  Swarm-ready: ACTIVE"
 [ "${INIT_SWARM}" -eq 1 ] && echo "  Init-Swarm : ACTIVE"
 [ "${JOIN_SWARM}" -eq 1 ] && echo "  Join-Swarm : ACTIVE (manager=${JOIN_MANAGER_IP})"
+[ ${#APPS[@]} -gt 0 ] && echo "  Apps       : ${APPS[*]}"
 echo "==========================================="
 echo ""
 
@@ -1250,6 +1299,92 @@ if [ "${JOIN_SWARM}" -eq 1 ]; then
 fi
 
 # ══════════════════════════════════════════════════════════════════════════════
+# DEPLOIEMENT DES APPS (si --app)
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Recupere un fichier du repo : en local (SCRIPT_DIR) d'abord, sinon GitHub.
+fetch_app_file() {
+    local rel_path="$1"
+    local dest="$2"
+    if [ -n "${SCRIPT_DIR}" ] && [ -f "${SCRIPT_DIR}/${rel_path}" ]; then
+        cp "${SCRIPT_DIR}/${rel_path}" "${dest}"
+    else
+        wget -qLO "${dest}" "${REPO_RAW_URL}/${rel_path}" && [ -s "${dest}" ]
+    fi
+}
+
+# App alloy (v3) : collecteur de logs Docker + journald -> Loki.
+# Labels : host=${ALLOY_HOSTNAME:-lxc<CTID>}, module=${MODULE}, role=${ROLE}.
+deploy_app_alloy() {
+    echo ""
+    echo "==========================================="
+    echo "  App : alloy (collecteur de logs)"
+    echo "==========================================="
+    ALLOY_HOST_LABEL="${ALLOY_HOSTNAME:-lxc${CTID}}"
+    echo "  LOKI_URL : ${LOKI_URL}"
+    echo "  HOSTNAME : ${ALLOY_HOST_LABEL}"
+    echo "  MODULE   : ${MODULE:-none}"
+    echo "  ROLE     : ${ROLE:-none}"
+    echo ""
+
+    local work_dir f
+    work_dir="$(mktemp -d /tmp/alloy-files.XXXXXX)"
+
+    echo "  [1/3] Recuperation des fichiers Alloy..."
+    for f in 03-install-alloy.sh alloy-agent/config.alloy \
+             alloy-agent/config-journald-only.alloy alloy-agent/docker-compose.yml; do
+        if ! fetch_app_file "${f}" "${work_dir}/$(basename "${f}")"; then
+            echo "  [!] Impossible de recuperer ${f} (ni local, ni ${REPO_RAW_URL})"
+            rm -rf "${work_dir}"
+            return 1
+        fi
+    done
+    echo "  -> OK"
+
+    echo "  [2/3] Copie des fichiers dans le LXC..."
+    if ! pct exec "${CTID}" -- bash -c "rm -rf /tmp/alloy-agent && mkdir -p /tmp/alloy-agent"; then
+        rm -rf "${work_dir}"
+        return 1
+    fi
+    for f in config.alloy config-journald-only.alloy docker-compose.yml; do
+        if ! pct push "${CTID}" "${work_dir}/${f}" "/tmp/alloy-agent/${f}"; then
+            echo "  [!] Echec pct push ${f}"
+            rm -rf "${work_dir}"
+            return 1
+        fi
+    done
+    if ! pct push "${CTID}" "${work_dir}/03-install-alloy.sh" /root/03-install-alloy.sh; then
+        echo "  [!] Echec pct push 03-install-alloy.sh"
+        rm -rf "${work_dir}"
+        return 1
+    fi
+    pct exec "${CTID}" -- chmod +x /root/03-install-alloy.sh
+    rm -rf "${work_dir}"
+    echo "  -> OK"
+
+    echo "  [3/3] Installation Alloy dans le LXC..."
+    if pct exec "${CTID}" -- env \
+        LOKI_URL="${LOKI_URL}" \
+        HOSTNAME="${ALLOY_HOST_LABEL}" \
+        MODULE="${MODULE}" \
+        ROLE="${ROLE}" \
+        STRICT_CHECKS="${STRICT_CHECKS}" \
+        /root/03-install-alloy.sh; then
+        ALLOY_OK=1
+        echo "  -> App alloy deployee"
+    else
+        echo "  [!] Echec du deploiement de l'app alloy"
+        return 1
+    fi
+}
+
+for app in "${APPS[@]}"; do
+    case "${app}" in
+        alloy) deploy_app_alloy || APPS_FAILED=1 ;;
+    esac
+done
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Recuperation infos systeme (pour JSON)
 # ══════════════════════════════════════════════════════════════════════════════
 CT_IP=$(pct exec "${CTID}" -- bash -c "ip -4 addr show eth0 2>/dev/null | grep inet | awk '{print \$2}' | cut -d/ -f1 | head -1" 2>/dev/null || echo "")
@@ -1309,6 +1444,17 @@ fi
 if [ "${JOIN_SWARM}" -eq 1 ] && [ "${JOIN_SWARM_OK}" -eq 1 ]; then
     echo "  Swarm        : rejoint comme ${JOIN_NEW_ROLE} (manager=${JOIN_MANAGER_IP})"
 fi
+for app in "${APPS[@]}"; do
+    case "${app}" in
+        alloy)
+            if [ "${ALLOY_OK}" -eq 1 ]; then
+                echo "  App alloy    : OK (host=${ALLOY_HOST_LABEL} -> ${LOKI_URL})"
+            else
+                echo "  App alloy    : ECHEC"
+            fi
+            ;;
+    esac
+done
 echo "==========================================="
 echo ""
 
@@ -1337,6 +1483,10 @@ fi
 if [ "${JOIN_SWARM}" -eq 1 ] && [ "${JOIN_SWARM_OK}" -eq 0 ]; then
     OVERALL_STATUS="failed"
     EXIT_CODE=1
+fi
+if [ "${APPS_FAILED}" -eq 1 ] && [ "${EXIT_CODE}" -eq 0 ]; then
+    OVERALL_STATUS="partial"
+    EXIT_CODE=2
 fi
 
 # ── Bloc machine (toujours present) ──────────────────────────────────────────
@@ -1488,6 +1638,27 @@ build_swarm_json() {
     printf '}'
 }
 
+# ── Bloc apps (si --app) ─────────────────────────────────────────────────────
+build_apps_json() {
+    local first=1
+    printf '['
+    for app in "${APPS[@]}"; do
+        [ ${first} -eq 1 ] || printf ','
+        first=0
+        case "${app}" in
+            alloy)
+                printf '{"name":"alloy","ok":%s,"hostname":"%s","loki_url":"%s","module":%s,"role":%s}' \
+                    "$([ "${ALLOY_OK}" -eq 1 ] && echo true || echo false)" \
+                    "$(json_escape "${ALLOY_HOST_LABEL}")" \
+                    "$(json_escape "${LOKI_URL}")" \
+                    "$(json_str_or_null "${MODULE}")" \
+                    "$(json_str_or_null "${ROLE}")"
+                ;;
+        esac
+    done
+    printf ']'
+}
+
 # ── Composition finale ───────────────────────────────────────────────────────
 printf '{'
 printf '"status":"%s",' "${OVERALL_STATUS}"
@@ -1505,6 +1676,12 @@ if [ "${INIT_SWARM}" -eq 1 ] || [ "${JOIN_SWARM}" -eq 1 ]; then
     printf ','
     printf '"swarm":'
     build_swarm_json
+fi
+
+if [ ${#APPS[@]} -gt 0 ]; then
+    printf ','
+    printf '"apps":'
+    build_apps_json
 fi
 
 printf '}\n'

@@ -6,6 +6,10 @@
 // Variables d'env attendues :
 //   LOKI_URL  — endpoint complet Loki, ex: http://192.168.10.<IP_LXC116>:3100/loki/api/v1/push
 //   HOSTNAME  — identifiant de l'hôte qui sera attaché en label `host`, ex: lxc201
+//
+// Variables d'env optionnelles (v3) :
+//   MODULE    — label `module` (ex: agflow, logs, vault). Défaut : "none"
+//   ROLE      — label `role` (ex: manager, worker, standalone). Défaut : "none"
 
 logging {
   level  = "info"
@@ -92,5 +96,7 @@ loki.write "central" {
   }
   external_labels = {
     cluster = "homelab",
+    module  = coalesce(sys.env("MODULE"), "none"),
+    role    = coalesce(sys.env("ROLE"), "none"),
   }
 }

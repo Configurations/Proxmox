@@ -13,6 +13,8 @@
 #   HOSTNAME  - identifiant du LXC (label `host`), ex : lxc201
 #
 # Variables optionnelles :
+#   MODULE=...          - label `module` attache aux logs (ex : agflow). Defaut : none
+#   ROLE=...            - label `role` attache aux logs (ex : manager). Defaut : none
 #   STRICT_CHECKS=1     - echec si Loki injoignable (defaut : 0, juste warning)
 #   ALLOY_SRC_DIR=...   - dossier source des fichiers (defaut : /tmp/alloy-agent)
 #   ALLOY_DST_DIR=...   - dossier d'installation (defaut : /opt/alloy-agent)
@@ -31,6 +33,8 @@ APT_OPTS=(-o Dpkg::Options::=--force-confold -o Dpkg::Options::=--force-confdef)
 
 LOKI_URL="${LOKI_URL:-}"
 HOSTNAME_LABEL="${HOSTNAME:-$(hostname)}"
+MODULE="${MODULE:-}"
+ROLE="${ROLE:-}"
 ALLOY_SRC_DIR="${ALLOY_SRC_DIR:-/tmp/alloy-agent}"
 ALLOY_DST_DIR="${ALLOY_DST_DIR:-/opt/alloy-agent}"
 STRICT_CHECKS="${STRICT_CHECKS:-0}"
@@ -39,6 +43,8 @@ echo "==========================================="
 echo "  Installation Grafana Alloy"
 echo "==========================================="
 echo "  HOSTNAME     : ${HOSTNAME_LABEL}"
+echo "  MODULE       : ${MODULE:-none}"
+echo "  ROLE         : ${ROLE:-none}"
 echo "  LOKI_URL     : ${LOKI_URL}"
 echo "  Source dir   : ${ALLOY_SRC_DIR}"
 echo "  Target dir   : ${ALLOY_DST_DIR}"
@@ -126,6 +132,8 @@ if [ "${HAS_DOCKER}" -eq 1 ]; then
     cat > "${ALLOY_DST_DIR}/.env" << EOF
 LOKI_URL=${LOKI_URL}
 HOSTNAME=${HOSTNAME_LABEL}
+MODULE=${MODULE}
+ROLE=${ROLE}
 EOF
     echo "  -> ${ALLOY_DST_DIR}/.env"
 
@@ -220,6 +228,8 @@ CUSTOM_ARGS=""
 RESTART_ON_UPGRADE=true
 LOKI_URL=${LOKI_URL}
 HOSTNAME=${HOSTNAME_LABEL}
+MODULE=${MODULE}
+ROLE=${ROLE}
 EOF
     echo "  -> /etc/alloy/config.alloy"
     echo "  -> /etc/default/alloy"
@@ -263,4 +273,4 @@ echo ""
 echo "==========================================="
 echo "  Alloy installe et demarre"
 echo "==========================================="
-echo "{\"status\":\"ok\",\"hostname\":\"${HOSTNAME_LABEL}\",\"loki_url\":\"${LOKI_URL}\",\"loki_reachable\":${LOKI_OK},\"strict_checks\":${STRICT_CHECKS},\"mode\":\"$([ ${HAS_DOCKER} -eq 1 ] && echo docker || echo systemd)\"}"
+echo "{\"status\":\"ok\",\"hostname\":\"${HOSTNAME_LABEL}\",\"module\":\"${MODULE}\",\"role\":\"${ROLE}\",\"loki_url\":\"${LOKI_URL}\",\"loki_reachable\":${LOKI_OK},\"strict_checks\":${STRICT_CHECKS},\"mode\":\"$([ ${HAS_DOCKER} -eq 1 ] && echo docker || echo systemd)\"}"
