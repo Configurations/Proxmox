@@ -51,7 +51,10 @@
 #                               KOMODO_SERVER_NAME, KOMODO_ONBOARDING_KEY.
 #                               Requiert Docker (--docker).
 #                             Les apps se deploient EN SERIE, dans l'ordre des
-#                             flags --app.
+#                             flags --app. Les parametres requis non fournis en
+#                             variables d'environnement sont DEMANDES
+#                             INTERACTIVEMENT au lancement (si TTY) ; sans TTY,
+#                             echec immediat avant toute creation.
 #
 # --init-swarm et --join-swarm sont mutuellement exclusifs.
 # Sans aucun flag : VM nue (pas de Docker, pas de Swarm).
@@ -137,6 +140,35 @@ fail() {
     echo "  ECHEC : $1"
     [ -n "${2:-}" ] && echo "${2}" | sed 's/^/    /'
     exit 1
+}
+
+# Demande interactivement la valeur d'une variable si elle est vide.
+# En mode non interactif (pas de TTY), echoue si la variable est requise.
+# $1 = nom de la variable, $2 = libelle affiche, $3 = defaut (vide = aucun),
+# $4 = 1 si requis, 0 si optionnel
+prompt_var() {
+    local var_name="$1" label="$2" default="$3" required="$4" value
+    [ -n "${!var_name}" ] && return 0
+    if [ ! -t 0 ]; then
+        if [ "${required}" -eq 1 ]; then
+            fail "${var_name} est requis" \
+                 "Mode non interactif : passez ${var_name}=... en variable d'environnement (${label})"
+        fi
+        return 0
+    fi
+    while :; do
+        if [ -n "${default}" ]; then
+            read -r -p "    ${label} [${default}] : " value
+            value="${value:-${default}}"
+        else
+            read -r -p "    ${label} : " value
+        fi
+        if [ -n "${value}" ] || [ "${required}" -eq 0 ]; then
+            break
+        fi
+        echo "    -> valeur requise."
+    done
+    printf -v "${var_name}" '%s' "${value}"
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -266,26 +298,12 @@ if [ "${JOIN_SWARM}" -eq 1 ]; then
     fi
 fi
 
-# Validation des apps demandees (--app)
+# Validation des apps demandees (--app). Les parametres manquants sont
+# demandes interactivement plus bas, une fois le VMID connu.
 for app in "${APPS[@]}"; do
     case "${app}" in
-        alloy)
-            if [ -z "${LOKI_URL}" ]; then
-                fail "--app alloy requiert LOKI_URL" \
-                     "Ex : LOKI_URL=http://192.168.10.116:3100/loki/api/v1/push"
-            fi
-            ;;
-        alloy-metrics)
-            if [ -z "${PROM_URL}" ]; then
-                fail "--app alloy-metrics requiert PROM_URL" \
-                     "Ex : PROM_URL=http://192.168.10.116:9090/api/v1/write"
-            fi
-            ;;
+        alloy|alloy-metrics) : ;;
         periphery)
-            if [ -z "${KOMODO_ADDRESS}" ]; then
-                fail "--app periphery requiert KOMODO_ADDRESS" \
-                     "Ex : KOMODO_ADDRESS=https://komodo.example.org"
-            fi
             if [ "${DOCKER_MODE}" -eq 0 ]; then
                 fail "--app periphery requiert Docker" \
                      "Ajoutez --docker (le periphery tourne en container)"
@@ -329,6 +347,45 @@ fi
 
 CONF="/etc/pve/qemu-server/${VMID}.conf"
 ROOT_VM_PASS=$(tr -dc 'A-Za-z0-9_!@#$%^&*' </dev/urandom 2>/dev/null | head -c 24 || echo "vmpass$(date +%s)")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PARAMETRES DES APPS : demande interactive des valeurs manquantes
+# ══════════════════════════════════════════════════════════════════════════════
+# Chaque variable deja fournie en environnement n'est PAS redemandee.
+# Sans TTY (pipeline, manifest), une variable requise manquante = echec
+# immediat, avant toute creation.
+if [ ${#APPS[@]} -gt 0 ]; then
+    NEED_ALLOY_LABELS=0
+    echo "==========================================="
+    echo "  Parametres des apps (${APPS[*]})"
+    echo "==========================================="
+    for app in "${APPS[@]}"; do
+        case "${app}" in
+            alloy)
+                echo "  App alloy (logs -> Loki) :"
+                prompt_var LOKI_URL "Endpoint Loki (ex : http://192.168.10.116:3100/loki/api/v1/push)" "" 1
+                NEED_ALLOY_LABELS=1
+                ;;
+            alloy-metrics)
+                echo "  App alloy-metrics (metriques -> Prometheus/Mimir) :"
+                prompt_var PROM_URL "Endpoint remote_write (ex : http://192.168.10.116:9090/api/v1/write)" "" 1
+                NEED_ALLOY_LABELS=1
+                ;;
+            periphery)
+                echo "  App periphery (agent Komodo) :"
+                prompt_var KOMODO_ADDRESS "Adresse du Core Komodo (ex : https://komodo.example.org)" "" 1
+                prompt_var KOMODO_SERVER_NAME "Nom du Server Komodo" "vm${VMID}" 0
+                prompt_var KOMODO_ONBOARDING_KEY "Onboarding key (vide si le Server existe deja)" "" 0
+                ;;
+        esac
+    done
+    if [ "${NEED_ALLOY_LABELS}" -eq 1 ]; then
+        echo "  Labels communs logs/metriques :"
+        prompt_var MODULE "Label module (vide = none)" "" 0
+        prompt_var ROLE "Label role (vide = none)" "" 0
+    fi
+    echo ""
+fi
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TABLEAU DE BORD STORAGES + SELECTION AUTOMATIQUE

@@ -57,7 +57,11 @@ Bootstrap pattern:
 | `alloy-metrics` (v3) | Grafana Alloy metrics collector: host metrics (node exporter) and Docker container metrics (cadvisor), pushed via remote_write to Prometheus/Mimir (`host`/`module`/`role` labels). Without Docker: node exporter only (package + systemd). | `PROM_URL` (required), `MODULE`, `ROLE`, `ALLOY_HOSTNAME` (default `vm<VMID>`), `STRICT_CHECKS` |
 | `periphery` | Komodo Periphery agent (deployments driven by a Komodo Core). Connects out to the Core, no inbound port. Requires Docker (`--docker`). | `KOMODO_ADDRESS` (required), `KOMODO_SERVER_NAME` (default `vm<VMID>`), `KOMODO_ONBOARDING_KEY`, `STRICT_CHECKS` |
 
-Apps deploy **in series**, in `--app` flag order:
+Apps deploy **in series**, in `--app` flag order.
+Missing variables are **prompted interactively** at launch (required
+endpoints, labels, Komodo Server name with suggested defaults); in
+non-interactive mode (pipeline/manifest), a missing required variable
+fails the script before anything is created:
 
 ```bash
 LOKI_URL=http://192.168.10.116:3100/loki/api/v1/push \

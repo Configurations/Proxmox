@@ -56,7 +56,11 @@ initialise un cluster ou en rejoint un. Remplace les anciens
 | `alloy-metrics` (v3) | Collecteur de métriques Grafana Alloy : métriques du host (node exporter) et des containers Docker (cadvisor), poussées en remote_write vers Prometheus/Mimir (labels `host`/`module`/`role`). Sans Docker : node exporter seul (paquet + systemd). | `PROM_URL` (requis), `MODULE`, `ROLE`, `ALLOY_HOSTNAME` (défaut `lxc<CTID>`), `STRICT_CHECKS` |
 | `periphery` | Agent Komodo Periphery (déploiement piloté par un Core Komodo). Se connecte en sortie vers le Core, aucun port à exposer. Requiert Docker (`--docker`). | `KOMODO_ADDRESS` (requis), `KOMODO_SERVER_NAME` (défaut `lxc<CTID>`), `KOMODO_ONBOARDING_KEY`, `STRICT_CHECKS` |
 
-Les apps se déploient **en série**, dans l'ordre des flags `--app` :
+Les apps se déploient **en série**, dans l'ordre des flags `--app`.
+Les variables non fournies sont **demandées interactivement** au lancement
+(endpoints requis, labels, nom du Server Komodo avec défauts proposés) ;
+en mode non interactif (pipeline/manifest), une variable requise manquante
+fait échouer le script avant toute création :
 
 ```bash
 LOKI_URL=http://192.168.10.116:3100/loki/api/v1/push \
