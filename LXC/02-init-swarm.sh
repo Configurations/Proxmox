@@ -25,7 +25,7 @@
 #   AUTO_FIX=1                 Correction automatique de live-restore (defaut)
 #
 # Pre-requis :
-#   - LXC cree via 00-create-lxc-swarm.sh ... --swarm
+#   - LXC cree via create-lxc.sh ... --swarm
 #   - Docker installe et operationnel dans le LXC
 #   - Modules kernel ip_vs/overlay charges sur l'hote Proxmox
 ###############################################################################
@@ -91,7 +91,7 @@ echo "[1/7] Pre-checks LXC..."
 
 if ! pct status "${CTID}" &>/dev/null; then
     fail "LXC ${CTID} n'existe pas" \
-         "Creez-le d'abord : ./00-create-lxc-swarm.sh ${CTID} <hostname> --swarm"
+         "Creez-le d'abord : ./create-lxc.sh ${CTID} <hostname> --swarm"
 fi
 echo "  -> LXC existe : OK"
 
@@ -104,13 +104,13 @@ echo "  -> LXC running : OK"
 
 if ! grep -q "^tags:.*swarm-ready" "${CONF}" 2>/dev/null; then
     fail "LXC ${CTID} n'a pas le tag 'swarm-ready'" \
-         "Ce LXC n'a pas ete configure pour Swarm (manque /dev/net/tun et sysctl). Reconfigurez : ./00-create-lxc-swarm.sh ${CTID} --swarm"
+         "Ce LXC n'a pas ete configure pour Swarm (manque /dev/net/tun et sysctl). Reconfigurez : ./create-lxc.sh ${CTID} --swarm"
 fi
 echo "  -> Tag swarm-ready : OK"
 
 if ! pct exec "${CTID}" -- test -c /dev/net/tun 2>/dev/null; then
     fail "/dev/net/tun absent dans le LXC" \
-         "VXLAN ne fonctionnera pas. Reconfigurez : ./00-create-lxc-swarm.sh ${CTID} --swarm"
+         "VXLAN ne fonctionnera pas. Reconfigurez : ./create-lxc.sh ${CTID} --swarm"
 fi
 echo "  -> /dev/net/tun : OK"
 

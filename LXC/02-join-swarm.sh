@@ -4,7 +4,7 @@
 #
 # A executer sur l'HOTE PROXMOX (pas dans le container).
 #
-# Le LXC cible doit avoir ete cree au prealable avec 00-create-lxc.sh --swarm
+# Le LXC cible doit avoir ete cree au prealable avec create-lxc.sh --swarm
 # (Docker installe + sysctl + /dev/net/tun).
 #
 # Pour recuperer l'IP et le token du manager existant :
@@ -80,7 +80,7 @@ fi
 # Verifier que le LXC existe
 if ! pct status "${CTID}" &>/dev/null; then
     echo "ERREUR : le LXC ${CTID} n'existe pas."
-    echo "        Creez-le d'abord : ./00-create-lxc.sh ${CTID} <hostname> --swarm"
+    echo "        Creez-le d'abord : ./create-lxc.sh ${CTID} <hostname> --swarm"
     exit 1
 fi
 
@@ -94,7 +94,7 @@ fi
 # Verifier que Docker est installe dans le LXC
 if ! pct exec "${CTID}" -- bash -c "command -v docker >/dev/null && docker info >/dev/null 2>&1"; then
     echo "ERREUR : Docker n'est pas operationnel dans le LXC ${CTID}."
-    echo "        Lancez d'abord : ./00-create-lxc.sh ${CTID} <hostname> --swarm"
+    echo "        Lancez d'abord : ./create-lxc.sh ${CTID} <hostname> --swarm"
     exit 1
 fi
 
