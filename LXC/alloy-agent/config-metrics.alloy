@@ -1,0 +1,60 @@
+// agflow-metrics / Alloy collector — métriques host + containers Docker
+//
+// À utiliser sur les hosts qui ont Docker (via docker-compose-metrics.yml).
+// Pour les hosts sans Docker, utiliser config-metrics-nodocker.alloy.
+//
+// Variables d'env attendues :
+//   PROM_URL  — endpoint remote_write complet,
+//               ex: http://192.168.10.116:9090/api/v1/write (Prometheus)
+//               ou  http://192.168.10.116:9009/api/v1/push  (Mimir)
+//   HOSTNAME  — identifiant de l'hôte (label `host`), ex: lxc201
+//
+// Variables d'env optionnelles (v3) :
+//   MODULE    — label `module` (ex: agflow, logs, vault). Défaut : "none"
+//   ROLE      — label `role` (ex: manager, worker, standalone). Défaut : "none"
+
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+// ── Source 1 : métriques host (node exporter) ────────────────────────────────
+// Les chemins /host/* correspondent aux mounts du docker-compose-metrics.yml.
+
+prometheus.exporter.unix "host" {
+  procfs_path = "/host/proc"
+  sysfs_path  = "/host/sys"
+  rootfs_path = "/host/root"
+}
+
+prometheus.scrape "host" {
+  targets         = prometheus.exporter.unix.host.targets
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.central.receiver]
+}
+
+// ── Source 2 : métriques containers Docker (cadvisor embarqué) ───────────────
+
+prometheus.exporter.cadvisor "containers" {
+  docker_host = "unix:///var/run/docker.sock"
+}
+
+prometheus.scrape "containers" {
+  targets         = prometheus.exporter.cadvisor.containers.targets
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.central.receiver]
+}
+
+// ── Sink : remote_write central ───────────────────────────────────────────────
+
+prometheus.remote_write "central" {
+  endpoint {
+    url = sys.env("PROM_URL")
+  }
+  external_labels = {
+    cluster = "homelab",
+    host    = sys.env("HOSTNAME"),
+    module  = coalesce(sys.env("MODULE"), "none"),
+    role    = coalesce(sys.env("ROLE"), "none"),
+  }
+}

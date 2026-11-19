@@ -220,19 +220,31 @@ else
 
     echo "[3/5] Ecriture config et environment..."
     cp "${ALLOY_SRC_DIR}/config-journald-only.alloy" /etc/alloy/config.alloy
+
     # L'unit systemd du paquet Debian attend CONFIG_FILE et CUSTOM_ARGS.
-    # Sans CONFIG_FILE, `alloy run` echoue ("accepts 1 arg(s), received 0").
-    cat > /etc/default/alloy << EOF
-CONFIG_FILE="/etc/alloy/config.alloy"
-CUSTOM_ARGS=""
-RESTART_ON_UPGRADE=true
-LOKI_URL=${LOKI_URL}
-HOSTNAME=${HOSTNAME_LABEL}
-MODULE=${MODULE}
-ROLE=${ROLE}
-EOF
+    # CONFIG_FILE pointe sur le DOSSIER /etc/alloy : Alloy charge tous les
+    # fichiers *.alloy, ce qui permet la coexistence avec l'agent metriques
+    # (04-install-alloy-metrics.sh ecrit /etc/alloy/metrics.alloy).
+    # Mise a jour idempotente : on ne remplace que nos clefs pour ne pas
+    # ecraser celles de l'agent metriques (PROM_URL, ...).
+    ensure_default_var() {
+        local key="$1" val="$2"
+        touch /etc/default/alloy
+        if grep -q "^${key}=" /etc/default/alloy; then
+            sed -i "s|^${key}=.*|${key}=${val}|" /etc/default/alloy
+        else
+            echo "${key}=${val}" >> /etc/default/alloy
+        fi
+    }
+    ensure_default_var CONFIG_FILE '"/etc/alloy"'
+    ensure_default_var CUSTOM_ARGS '""'
+    ensure_default_var RESTART_ON_UPGRADE "true"
+    ensure_default_var LOKI_URL "${LOKI_URL}"
+    ensure_default_var HOSTNAME "${HOSTNAME_LABEL}"
+    ensure_default_var MODULE "${MODULE}"
+    ensure_default_var ROLE "${ROLE}"
     echo "  -> /etc/alloy/config.alloy"
-    echo "  -> /etc/default/alloy"
+    echo "  -> /etc/default/alloy (CONFIG_FILE=/etc/alloy)"
 
     echo "[4/5] Demarrage service alloy..."
     systemctl daemon-reload

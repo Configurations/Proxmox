@@ -1,0 +1,42 @@
+# agflow-metrics / Alloy agent métriques — compose pour les hosts avec Docker
+#
+# Variables d'env attendues dans .env :
+#   PROM_URL  — endpoint remote_write, ex: http://192.168.10.116:9090/api/v1/write
+#   HOSTNAME  — identifiant de l'hôte (label `host`), ex: lxc201
+#   MODULE    — optionnel, label `module` (ex: agflow). Défaut : none
+#   ROLE      — optionnel, label `role` (ex: manager, worker). Défaut : none
+#
+# Mounts en lecture seule :
+#   - /proc, /sys, / pour les métriques host (node exporter)
+#   - socket Docker + /var/lib/docker pour les métriques containers (cadvisor)
+#
+# privileged : requis par le cadvisor embarqué (accès cgroups complets).
+# Port HTTP interne 12346 (12345 est pris par l'agent logs si présent).
+
+services:
+  alloy-metrics:
+    image: grafana/alloy:v1.5.1
+    container_name: agflow-alloy-metrics
+    restart: unless-stopped
+    privileged: true
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy/data
+      - --server.http.listen-addr=0.0.0.0:12346
+    environment:
+      PROM_URL: ${PROM_URL:?PROM_URL is required}
+      HOSTNAME: ${HOSTNAME:?HOSTNAME is required}
+      MODULE: ${MODULE:-}
+      ROLE: ${ROLE:-}
+    volumes:
+      - ./config-metrics.alloy:/etc/alloy/config.alloy:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - alloy_metrics_data:/var/lib/alloy/data
+
+volumes:
+  alloy_metrics_data:

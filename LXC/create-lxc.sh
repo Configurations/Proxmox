@@ -29,6 +29,13 @@
 #                               (requis), MODULE, ROLE, ALLOY_HOSTNAME.
 #                               Fonctionne avec ou sans --docker (mode compose
 #                               si Docker present, sinon paquet + systemd).
+#                             - alloy-metrics (v3) : collecteur de metriques
+#                               Grafana Alloy. Collecte les metriques du host
+#                               (node exporter) et des containers Docker
+#                               (cadvisor) et les pousse en remote_write vers
+#                               Prometheus/Mimir. Variables : PROM_URL (requis),
+#                               MODULE, ROLE, ALLOY_HOSTNAME. Sans Docker :
+#                               node exporter seul (paquet + systemd).
 #
 # --init-swarm et --join-swarm sont mutuellement exclusifs.
 # Sans aucun flag : LXC nu, aucune optimisation Docker/Swarm.
@@ -68,6 +75,7 @@
 #   TOKEN_DIR=...                    Dossier des tokens Swarm
 #   MIN_FREE_MB=1024                 Espace min dans le LXC (Docker)
 #   LOKI_URL=...                     Endpoint Loki (requis avec --app alloy)
+#   PROM_URL=...                     Endpoint remote_write (requis avec --app alloy-metrics)
 #   MODULE=...                       Label `module` des logs (--app alloy)
 #   ROLE=...                         Label `role` des logs (--app alloy)
 #   ALLOY_HOSTNAME=...               Label `host` des logs (defaut : lxc<CTID>)
@@ -145,9 +153,10 @@ LISTEN_ADDR_JOIN="${LISTEN_ADDR:-0.0.0.0:2377}"
 FORCE_LEAVE="${FORCE_LEAVE:-no}"
 
 # Apps deployables (--app)
-SUPPORTED_APPS="alloy"
+SUPPORTED_APPS="alloy alloy-metrics"
 REPO_RAW_URL="${REPO_RAW_URL:-https://github.com/Configurations/Proxmox/raw/main/LXC}"
 LOKI_URL="${LOKI_URL:-}"
+PROM_URL="${PROM_URL:-}"
 MODULE="${MODULE:-}"
 ROLE="${ROLE:-}"
 ALLOY_HOSTNAME="${ALLOY_HOSTNAME:-}"
@@ -175,6 +184,8 @@ ADVERTISE_ADDR_USED=""
 APPS_FAILED=0
 ALLOY_OK=0
 ALLOY_HOST_LABEL=""
+METRICS_OK=0
+METRICS_HOST_LABEL=""
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Parsing des arguments
@@ -232,6 +243,12 @@ for app in "${APPS[@]}"; do
                      "Ex : LOKI_URL=http://192.168.10.116:3100/loki/api/v1/push"
             fi
             ;;
+        alloy-metrics)
+            if [ -z "${PROM_URL}" ]; then
+                fail "--app alloy-metrics requiert PROM_URL" \
+                     "Ex : PROM_URL=http://192.168.10.116:9090/api/v1/write"
+            fi
+            ;;
         *)
             fail "App inconnue : '${app}'" "Apps supportees : ${SUPPORTED_APPS}"
             ;;
@@ -255,8 +272,9 @@ Flags :
       --token <TOKEN>       Token de join (obligatoire avec --join-swarm)
       --as-manager          Rejoindre comme manager (defaut : worker)
   --app <nom>               Deploie une app apres creation (repetable)
-                            Apps : alloy (collecteur de logs -> Loki ;
-                            requiert LOKI_URL, options MODULE/ROLE)
+                            Apps : alloy (logs -> Loki ; requiert LOKI_URL),
+                            alloy-metrics (metriques -> Prometheus/Mimir ;
+                            requiert PROM_URL). Options : MODULE/ROLE
 
 Sans flag : LXC nu (pas de Docker, pas de Swarm).
 
@@ -1378,9 +1396,76 @@ deploy_app_alloy() {
     fi
 }
 
+# App alloy-metrics (v3) : metriques host (node exporter) + containers Docker
+# (cadvisor) -> remote_write Prometheus/Mimir.
+# Labels : host=${ALLOY_HOSTNAME:-lxc<CTID>}, module=${MODULE}, role=${ROLE}.
+deploy_app_alloy_metrics() {
+    echo ""
+    echo "==========================================="
+    echo "  App : alloy-metrics (collecteur de metriques)"
+    echo "==========================================="
+    METRICS_HOST_LABEL="${ALLOY_HOSTNAME:-lxc${CTID}}"
+    echo "  PROM_URL : ${PROM_URL}"
+    echo "  HOSTNAME : ${METRICS_HOST_LABEL}"
+    echo "  MODULE   : ${MODULE:-none}"
+    echo "  ROLE     : ${ROLE:-none}"
+    echo ""
+
+    local work_dir f
+    work_dir="$(mktemp -d /tmp/alloy-metrics-files.XXXXXX)"
+
+    echo "  [1/3] Recuperation des fichiers Alloy metriques..."
+    for f in 04-install-alloy-metrics.sh alloy-agent/config-metrics.alloy \
+             alloy-agent/config-metrics-nodocker.alloy alloy-agent/docker-compose-metrics.yml; do
+        if ! fetch_app_file "${f}" "${work_dir}/$(basename "${f}")"; then
+            echo "  [!] Impossible de recuperer ${f} (ni local, ni ${REPO_RAW_URL})"
+            rm -rf "${work_dir}"
+            return 1
+        fi
+    done
+    echo "  -> OK"
+
+    echo "  [2/3] Copie des fichiers dans le LXC..."
+    if ! pct exec "${CTID}" -- bash -c "rm -rf /tmp/alloy-metrics && mkdir -p /tmp/alloy-metrics"; then
+        rm -rf "${work_dir}"
+        return 1
+    fi
+    for f in config-metrics.alloy config-metrics-nodocker.alloy docker-compose-metrics.yml; do
+        if ! pct push "${CTID}" "${work_dir}/${f}" "/tmp/alloy-metrics/${f}"; then
+            echo "  [!] Echec pct push ${f}"
+            rm -rf "${work_dir}"
+            return 1
+        fi
+    done
+    if ! pct push "${CTID}" "${work_dir}/04-install-alloy-metrics.sh" /root/04-install-alloy-metrics.sh; then
+        echo "  [!] Echec pct push 04-install-alloy-metrics.sh"
+        rm -rf "${work_dir}"
+        return 1
+    fi
+    pct exec "${CTID}" -- chmod +x /root/04-install-alloy-metrics.sh
+    rm -rf "${work_dir}"
+    echo "  -> OK"
+
+    echo "  [3/3] Installation Alloy metriques dans le LXC..."
+    if pct exec "${CTID}" -- env \
+        PROM_URL="${PROM_URL}" \
+        HOSTNAME="${METRICS_HOST_LABEL}" \
+        MODULE="${MODULE}" \
+        ROLE="${ROLE}" \
+        STRICT_CHECKS="${STRICT_CHECKS}" \
+        /root/04-install-alloy-metrics.sh; then
+        METRICS_OK=1
+        echo "  -> App alloy-metrics deployee"
+    else
+        echo "  [!] Echec du deploiement de l'app alloy-metrics"
+        return 1
+    fi
+}
+
 for app in "${APPS[@]}"; do
     case "${app}" in
-        alloy) deploy_app_alloy || APPS_FAILED=1 ;;
+        alloy)         deploy_app_alloy || APPS_FAILED=1 ;;
+        alloy-metrics) deploy_app_alloy_metrics || APPS_FAILED=1 ;;
     esac
 done
 
@@ -1451,6 +1536,13 @@ for app in "${APPS[@]}"; do
                 echo "  App alloy    : OK (host=${ALLOY_HOST_LABEL} -> ${LOKI_URL})"
             else
                 echo "  App alloy    : ECHEC"
+            fi
+            ;;
+        alloy-metrics)
+            if [ "${METRICS_OK}" -eq 1 ]; then
+                echo "  App metrics  : OK (host=${METRICS_HOST_LABEL} -> ${PROM_URL})"
+            else
+                echo "  App metrics  : ECHEC"
             fi
             ;;
     esac
@@ -1651,6 +1743,14 @@ build_apps_json() {
                     "$([ "${ALLOY_OK}" -eq 1 ] && echo true || echo false)" \
                     "$(json_escape "${ALLOY_HOST_LABEL}")" \
                     "$(json_escape "${LOKI_URL}")" \
+                    "$(json_str_or_null "${MODULE}")" \
+                    "$(json_str_or_null "${ROLE}")"
+                ;;
+            alloy-metrics)
+                printf '{"name":"alloy-metrics","ok":%s,"hostname":"%s","prom_url":"%s","module":%s,"role":%s}' \
+                    "$([ "${METRICS_OK}" -eq 1 ] && echo true || echo false)" \
+                    "$(json_escape "${METRICS_HOST_LABEL}")" \
+                    "$(json_escape "${PROM_URL}")" \
                     "$(json_str_or_null "${MODULE}")" \
                     "$(json_str_or_null "${ROLE}")"
                 ;;

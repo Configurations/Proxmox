@@ -54,6 +54,7 @@ Bootstrap pattern:
 | App | Description | Variables |
 |---|---|---|
 | `alloy` (v3) | Grafana Alloy log collector: collects the host's Docker and journald logs and pushes them to Loki (`host`/`module`/`role` labels). docker-compose mode when Docker is present, Debian package + systemd otherwise. | `LOKI_URL` (required), `MODULE`, `ROLE`, `ALLOY_HOSTNAME` (default `vm<VMID>`), `STRICT_CHECKS` |
+| `alloy-metrics` (v3) | Grafana Alloy metrics collector: host metrics (node exporter) and Docker container metrics (cadvisor), pushed via remote_write to Prometheus/Mimir (`host`/`module`/`role` labels). Without Docker: node exporter only (package + systemd). | `PROM_URL` (required), `MODULE`, `ROLE`, `ALLOY_HOSTNAME` (default `vm<VMID>`), `STRICT_CHECKS` |
 
 ```bash
 LOKI_URL=http://192.168.10.116:3100/loki/api/v1/push \
@@ -131,6 +132,7 @@ LOKI_URL=http://192.168.10.116:3100/loki/api/v1/push \
 | `FORCE_LEAVE` | `no` | leave current Swarm before joining |
 | `AUTO_FIX` | `1` | auto-fix live-restore=true |
 | `LOKI_URL` | — | Loki endpoint (required with `--app alloy`) |
+| `PROM_URL` | — | remote_write endpoint (required with `--app alloy-metrics`) |
 | `MODULE` | *(empty)* | `module` label on logs (`--app alloy`) |
 | `ROLE` | *(empty)* | `role` label on logs (`--app alloy`) |
 | `ALLOY_HOSTNAME` | `vm<VMID>` | `host` label on logs (`--app alloy`) |

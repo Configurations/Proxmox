@@ -1,0 +1,40 @@
+// agflow-metrics / Alloy collector — métriques host uniquement (sans Docker)
+//
+// À utiliser sur les hosts qui n'ont PAS Docker (mode paquet + systemd).
+// Identique à config-metrics.alloy mais sans la section cadvisor et avec
+// les chemins /proc, /sys, / natifs (pas de mounts container).
+//
+// PAS de bloc `logging` ici : en mode systemd, Alloy charge tous les
+// fichiers *.alloy de /etc/alloy comme UNE seule config. Le fichier logs
+// (config.alloy) declare deja `logging` ; le redeclarer ici casserait la
+// config quand les deux apps sont installees. Seul, Alloy prend les
+// defauts (info / logfmt), ce qui revient au meme.
+//
+// Variables d'env attendues :
+//   PROM_URL  — endpoint remote_write complet
+//   HOSTNAME  — identifiant de l'hôte (label `host`)
+//
+// Variables d'env optionnelles (v3) :
+//   MODULE    — label `module` (ex: agflow, logs, vault). Défaut : "none"
+//   ROLE      — label `role` (ex: manager, worker, standalone). Défaut : "none"
+
+prometheus.exporter.unix "host" {
+}
+
+prometheus.scrape "host" {
+  targets         = prometheus.exporter.unix.host.targets
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.central.receiver]
+}
+
+prometheus.remote_write "central" {
+  endpoint {
+    url = sys.env("PROM_URL")
+  }
+  external_labels = {
+    cluster = "homelab",
+    host    = sys.env("HOSTNAME"),
+    module  = coalesce(sys.env("MODULE"), "none"),
+    role    = coalesce(sys.env("ROLE"), "none"),
+  }
+}
