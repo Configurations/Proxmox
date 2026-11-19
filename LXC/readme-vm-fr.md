@@ -55,10 +55,16 @@ Pattern de bootstrap :
 |---|---|---|
 | `alloy` (v3) | Collecteur de logs Grafana Alloy : collecte les logs Docker et journald du host et les pousse vers Loki (labels `host`/`module`/`role`). Mode docker-compose si Docker est présent, sinon paquet Debian + systemd. | `LOKI_URL` (requis), `MODULE`, `ROLE`, `ALLOY_HOSTNAME` (défaut `vm<VMID>`), `STRICT_CHECKS` |
 | `alloy-metrics` (v3) | Collecteur de métriques Grafana Alloy : métriques du host (node exporter) et des containers Docker (cadvisor), poussées en remote_write vers Prometheus/Mimir (labels `host`/`module`/`role`). Sans Docker : node exporter seul (paquet + systemd). | `PROM_URL` (requis), `MODULE`, `ROLE`, `ALLOY_HOSTNAME` (défaut `vm<VMID>`), `STRICT_CHECKS` |
+| `periphery` | Agent Komodo Periphery (déploiement piloté par un Core Komodo). Se connecte en sortie vers le Core, aucun port à exposer. Requiert Docker (`--docker`). | `KOMODO_ADDRESS` (requis), `KOMODO_SERVER_NAME` (défaut `vm<VMID>`), `KOMODO_ONBOARDING_KEY`, `STRICT_CHECKS` |
+
+Les apps se déploient **en série**, dans l'ordre des flags `--app` :
 
 ```bash
 LOKI_URL=http://192.168.10.116:3100/loki/api/v1/push \
-  MODULE=agflow ROLE=worker ./create-vm.sh 105 ag-app --docker --app alloy
+PROM_URL=http://192.168.10.116:9090/api/v1/write \
+KOMODO_ADDRESS=https://komodo.example.org \
+MODULE=agflow ROLE=worker \
+  ./create-vm.sh 106 ag-node --docker --app alloy --app alloy-metrics --app periphery
 ```
 
 ### Différences vs `create-lxc.sh`
@@ -134,6 +140,9 @@ LOKI_URL=http://192.168.10.116:3100/loki/api/v1/push \
 | `AUTO_FIX` | `1` | corrige automatiquement `live-restore=true` |
 | `LOKI_URL` | — | endpoint Loki (requis avec `--app alloy`) |
 | `PROM_URL` | — | endpoint remote_write (requis avec `--app alloy-metrics`) |
+| `KOMODO_ADDRESS` | — | adresse du Core Komodo (requis avec `--app periphery`) |
+| `KOMODO_SERVER_NAME` | `vm<VMID>` | nom du Server Komodo (`--app periphery`) |
+| `KOMODO_ONBOARDING_KEY` | *(vide)* | clef d'onboarding Komodo (`--app periphery`) |
 | `MODULE` | *(vide)* | label `module` des logs (`--app alloy`) |
 | `ROLE` | *(vide)* | label `role` des logs (`--app alloy`) |
 | `ALLOY_HOSTNAME` | `vm<VMID>` | label `host` des logs (`--app alloy`) |

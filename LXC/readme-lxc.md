@@ -54,10 +54,16 @@ the previous `00-create-lxc.sh` + `00-create-lxc-swarm.sh` +
 |---|---|---|
 | `alloy` (v3) | Grafana Alloy log collector: collects the host's Docker and journald logs and pushes them to Loki (`host`/`module`/`role` labels). docker-compose mode when Docker is present, Debian package + systemd otherwise. | `LOKI_URL` (required), `MODULE`, `ROLE`, `ALLOY_HOSTNAME` (default `lxc<CTID>`), `STRICT_CHECKS` |
 | `alloy-metrics` (v3) | Grafana Alloy metrics collector: host metrics (node exporter) and Docker container metrics (cadvisor), pushed via remote_write to Prometheus/Mimir (`host`/`module`/`role` labels). Without Docker: node exporter only (package + systemd). | `PROM_URL` (required), `MODULE`, `ROLE`, `ALLOY_HOSTNAME` (default `lxc<CTID>`), `STRICT_CHECKS` |
+| `periphery` | Komodo Periphery agent (deployments driven by a Komodo Core). Connects out to the Core, no inbound port. Requires Docker (`--docker`). | `KOMODO_ADDRESS` (required), `KOMODO_SERVER_NAME` (default `lxc<CTID>`), `KOMODO_ONBOARDING_KEY`, `STRICT_CHECKS` |
+
+Apps deploy **in series**, in `--app` flag order:
 
 ```bash
 LOKI_URL=http://192.168.10.116:3100/loki/api/v1/push \
-  MODULE=agflow ROLE=worker ./create-lxc.sh 205 ag-app --docker --app alloy
+PROM_URL=http://192.168.10.116:9090/api/v1/write \
+KOMODO_ADDRESS=https://komodo.example.org \
+MODULE=agflow ROLE=worker \
+  ./create-lxc.sh 206 ag-node --docker --app alloy --app alloy-metrics --app periphery
 ```
 
 ### Auto behaviors
@@ -114,6 +120,9 @@ LOKI_URL=http://192.168.10.116:3100/loki/api/v1/push \
 | `AUTO_FIX` | `1` | auto-fix live-restore=true |
 | `LOKI_URL` | — | Loki endpoint (required with `--app alloy`) |
 | `PROM_URL` | — | remote_write endpoint (required with `--app alloy-metrics`) |
+| `KOMODO_ADDRESS` | — | Komodo Core address (required with `--app periphery`) |
+| `KOMODO_SERVER_NAME` | `lxc<CTID>` | Komodo Server name (`--app periphery`) |
+| `KOMODO_ONBOARDING_KEY` | *(empty)* | Komodo onboarding key (`--app periphery`) |
 | `MODULE` | *(empty)* | `module` label on logs (`--app alloy`) |
 | `ROLE` | *(empty)* | `role` label on logs (`--app alloy`) |
 | `ALLOY_HOSTNAME` | `lxc<CTID>` | `host` label on logs (`--app alloy`) |

@@ -1,0 +1,46 @@
+# agflow / Komodo Periphery — agent de déploiement connecté à un Core Komodo
+#
+# Basé sur le compose officiel :
+# https://github.com/moghtech/komodo/blob/main/compose/periphery.compose.yaml
+# Image : tag majeur "2" (recommandation upstream, suit les patchs 2.x).
+#
+# Variables d'env attendues dans .env :
+#   KOMODO_ADDRESS        — adresse du Core Komodo (ex: https://komodo.example.org)
+#   KOMODO_SERVER_NAME    — nom du Server Komodo auquel se connecter. Doit
+#                           matcher un Server existant, ou être créé
+#                           automatiquement via l'onboarding key.
+#   KOMODO_ONBOARDING_KEY — optionnel. "Server Onboarding Key" créée dans
+#                           l'UI Komodo ; permet au periphery de créer le
+#                           Server s'il n'existe pas encore. Peut être retirée
+#                           une fois le Server créé.
+#   PERIPHERY_ROOT_DIRECTORY — optionnel, défaut /etc/komodo. Tous les compose
+#                           files et repos gérés par Komodo doivent être dedans.
+#                           Monté à l'identique dans le container (sinon Docker
+#                           se perd, cf. discussion upstream #180).
+#
+# Le periphery se connecte EN SORTIE vers le Core : aucun port à exposer.
+# La clef publique du Core est mémorisée au premier contact (volume keys).
+
+services:
+  periphery:
+    image: ghcr.io/moghtech/komodo-periphery:2
+    container_name: agflow-komodo-periphery
+    init: true
+    restart: unless-stopped
+    environment:
+      PERIPHERY_CORE_ADDRESS: ${KOMODO_ADDRESS:?KOMODO_ADDRESS is required}
+      PERIPHERY_CONNECT_AS: ${KOMODO_SERVER_NAME:?KOMODO_SERVER_NAME is required}
+      PERIPHERY_ONBOARDING_KEY: ${KOMODO_ONBOARDING_KEY:-}
+      PERIPHERY_CORE_PUBLIC_KEYS: file:/config/keys/core.pub
+      PERIPHERY_ROOT_DIRECTORY: ${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}
+      PERIPHERY_DISABLE_TERMINALS: "false"
+      PERIPHERY_DISABLE_CONTAINER_EXEC: "false"
+      PERIPHERY_INCLUDE_DISK_MOUNTS: /etc/hostname
+    volumes:
+      - keys:/config/keys
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /proc:/proc
+      - ${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}:${PERIPHERY_ROOT_DIRECTORY:-/etc/komodo}
+
+volumes:
+  keys:

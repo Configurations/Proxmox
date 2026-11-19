@@ -36,6 +36,14 @@
 #                               Prometheus/Mimir. Variables : PROM_URL (requis),
 #                               MODULE, ROLE, ALLOY_HOSTNAME. Sans Docker :
 #                               node exporter seul (paquet + systemd).
+#                             - periphery : agent Komodo Periphery (deploiement
+#                               pilote par un Core Komodo). Se connecte en
+#                               sortie vers le Core, aucun port a exposer.
+#                               Variables : KOMODO_ADDRESS (requis),
+#                               KOMODO_SERVER_NAME, KOMODO_ONBOARDING_KEY.
+#                               Requiert Docker (--docker).
+#                             Les apps se deploient EN SERIE, dans l'ordre des
+#                             flags --app.
 #
 # --init-swarm et --join-swarm sont mutuellement exclusifs.
 # Sans aucun flag : LXC nu, aucune optimisation Docker/Swarm.
@@ -52,6 +60,8 @@
 #   STORAGE=extended-lvm DISK_SIZE=50 ./create-lxc.sh 204 ag-data --init-swarm
 #   LOKI_URL=http://192.168.10.116:3100/loki/api/v1/push \
 #     MODULE=agflow ROLE=worker ./create-lxc.sh 205 ag-app --docker --app alloy
+#   LOKI_URL=... PROM_URL=... KOMODO_ADDRESS=https://komodo.example.org \
+#     ./create-lxc.sh 206 ag-node --docker --app alloy --app alloy-metrics --app periphery
 #
 # Variables d'environnement :
 #   STORAGE=auto          Selection auto du storage (defaut)
@@ -76,6 +86,9 @@
 #   MIN_FREE_MB=1024                 Espace min dans le LXC (Docker)
 #   LOKI_URL=...                     Endpoint Loki (requis avec --app alloy)
 #   PROM_URL=...                     Endpoint remote_write (requis avec --app alloy-metrics)
+#   KOMODO_ADDRESS=...               Adresse du Core Komodo (requis avec --app periphery)
+#   KOMODO_SERVER_NAME=...           Nom du Server Komodo (defaut : lxc<CTID>)
+#   KOMODO_ONBOARDING_KEY=...        Clef d'onboarding Komodo (optionnel, cree le Server)
 #   MODULE=...                       Label `module` des logs (--app alloy)
 #   ROLE=...                         Label `role` des logs (--app alloy)
 #   ALLOY_HOSTNAME=...               Label `host` des logs (defaut : lxc<CTID>)
@@ -153,10 +166,13 @@ LISTEN_ADDR_JOIN="${LISTEN_ADDR:-0.0.0.0:2377}"
 FORCE_LEAVE="${FORCE_LEAVE:-no}"
 
 # Apps deployables (--app)
-SUPPORTED_APPS="alloy alloy-metrics"
+SUPPORTED_APPS="alloy alloy-metrics periphery"
 REPO_RAW_URL="${REPO_RAW_URL:-https://github.com/Configurations/Proxmox/raw/main/LXC}"
 LOKI_URL="${LOKI_URL:-}"
 PROM_URL="${PROM_URL:-}"
+KOMODO_ADDRESS="${KOMODO_ADDRESS:-}"
+KOMODO_SERVER_NAME="${KOMODO_SERVER_NAME:-}"
+KOMODO_ONBOARDING_KEY="${KOMODO_ONBOARDING_KEY:-}"
 MODULE="${MODULE:-}"
 ROLE="${ROLE:-}"
 ALLOY_HOSTNAME="${ALLOY_HOSTNAME:-}"
@@ -186,6 +202,8 @@ ALLOY_OK=0
 ALLOY_HOST_LABEL=""
 METRICS_OK=0
 METRICS_HOST_LABEL=""
+PERIPHERY_OK=0
+PERIPHERY_SERVER_LABEL=""
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Parsing des arguments
@@ -249,6 +267,16 @@ for app in "${APPS[@]}"; do
                      "Ex : PROM_URL=http://192.168.10.116:9090/api/v1/write"
             fi
             ;;
+        periphery)
+            if [ -z "${KOMODO_ADDRESS}" ]; then
+                fail "--app periphery requiert KOMODO_ADDRESS" \
+                     "Ex : KOMODO_ADDRESS=https://komodo.example.org"
+            fi
+            if [ "${DOCKER_MODE}" -eq 0 ]; then
+                fail "--app periphery requiert Docker" \
+                     "Ajoutez --docker (le periphery tourne en container)"
+            fi
+            ;;
         *)
             fail "App inconnue : '${app}'" "Apps supportees : ${SUPPORTED_APPS}"
             ;;
@@ -271,10 +299,11 @@ Flags :
       --manager-ip <IP>     IP du manager (obligatoire avec --join-swarm)
       --token <TOKEN>       Token de join (obligatoire avec --join-swarm)
       --as-manager          Rejoindre comme manager (defaut : worker)
-  --app <nom>               Deploie une app apres creation (repetable)
+  --app <nom>               Deploie une app apres creation (repetable, en serie)
                             Apps : alloy (logs -> Loki ; requiert LOKI_URL),
-                            alloy-metrics (metriques -> Prometheus/Mimir ;
-                            requiert PROM_URL). Options : MODULE/ROLE
+                            alloy-metrics (metriques ; requiert PROM_URL),
+                            periphery (agent Komodo ; requiert KOMODO_ADDRESS
+                            et --docker). Options : MODULE/ROLE
 
 Sans flag : LXC nu (pas de Docker, pas de Swarm).
 
@@ -1462,10 +1491,71 @@ deploy_app_alloy_metrics() {
     fi
 }
 
+# App periphery : agent Komodo Periphery (deploiement pilote par un Core
+# Komodo). Se connecte en sortie vers le Core. Requiert Docker.
+deploy_app_periphery() {
+    echo ""
+    echo "==========================================="
+    echo "  App : periphery (agent Komodo)"
+    echo "==========================================="
+    PERIPHERY_SERVER_LABEL="${KOMODO_SERVER_NAME:-lxc${CTID}}"
+    echo "  Core        : ${KOMODO_ADDRESS}"
+    echo "  Server name : ${PERIPHERY_SERVER_LABEL}"
+    echo "  Onboarding  : $([ -n "${KOMODO_ONBOARDING_KEY}" ] && echo "oui (key fournie)" || echo "non")"
+    echo ""
+
+    local work_dir f
+    work_dir="$(mktemp -d /tmp/periphery-files.XXXXXX)"
+
+    echo "  [1/3] Recuperation des fichiers periphery..."
+    for f in 05-install-komodo-periphery.sh komodo-periphery/docker-compose.yml; do
+        if ! fetch_app_file "${f}" "${work_dir}/$(basename "${f}")"; then
+            echo "  [!] Impossible de recuperer ${f} (ni local, ni ${REPO_RAW_URL})"
+            rm -rf "${work_dir}"
+            return 1
+        fi
+    done
+    echo "  -> OK"
+
+    echo "  [2/3] Copie des fichiers dans le LXC..."
+    if ! pct exec "${CTID}" -- bash -c "rm -rf /tmp/komodo-periphery && mkdir -p /tmp/komodo-periphery"; then
+        rm -rf "${work_dir}"
+        return 1
+    fi
+    if ! pct push "${CTID}" "${work_dir}/docker-compose.yml" /tmp/komodo-periphery/docker-compose.yml; then
+        echo "  [!] Echec pct push docker-compose.yml"
+        rm -rf "${work_dir}"
+        return 1
+    fi
+    if ! pct push "${CTID}" "${work_dir}/05-install-komodo-periphery.sh" /root/05-install-komodo-periphery.sh; then
+        echo "  [!] Echec pct push 05-install-komodo-periphery.sh"
+        rm -rf "${work_dir}"
+        return 1
+    fi
+    pct exec "${CTID}" -- chmod +x /root/05-install-komodo-periphery.sh
+    rm -rf "${work_dir}"
+    echo "  -> OK"
+
+    echo "  [3/3] Installation periphery dans le LXC..."
+    if pct exec "${CTID}" -- env \
+        KOMODO_ADDRESS="${KOMODO_ADDRESS}" \
+        KOMODO_SERVER_NAME="${PERIPHERY_SERVER_LABEL}" \
+        KOMODO_ONBOARDING_KEY="${KOMODO_ONBOARDING_KEY}" \
+        STRICT_CHECKS="${STRICT_CHECKS}" \
+        /root/05-install-komodo-periphery.sh; then
+        PERIPHERY_OK=1
+        echo "  -> App periphery deployee"
+    else
+        echo "  [!] Echec du deploiement de l'app periphery"
+        return 1
+    fi
+}
+
 for app in "${APPS[@]}"; do
     case "${app}" in
         alloy)         deploy_app_alloy || APPS_FAILED=1 ;;
         alloy-metrics) deploy_app_alloy_metrics || APPS_FAILED=1 ;;
+        periphery)     deploy_app_periphery || APPS_FAILED=1 ;;
     esac
 done
 
@@ -1543,6 +1633,13 @@ for app in "${APPS[@]}"; do
                 echo "  App metrics  : OK (host=${METRICS_HOST_LABEL} -> ${PROM_URL})"
             else
                 echo "  App metrics  : ECHEC"
+            fi
+            ;;
+        periphery)
+            if [ "${PERIPHERY_OK}" -eq 1 ]; then
+                echo "  App periphery: OK (server=${PERIPHERY_SERVER_LABEL} -> ${KOMODO_ADDRESS})"
+            else
+                echo "  App periphery: ECHEC"
             fi
             ;;
     esac
@@ -1753,6 +1850,13 @@ build_apps_json() {
                     "$(json_escape "${PROM_URL}")" \
                     "$(json_str_or_null "${MODULE}")" \
                     "$(json_str_or_null "${ROLE}")"
+                ;;
+            periphery)
+                printf '{"name":"periphery","ok":%s,"server_name":"%s","core_address":"%s","onboarding_key_used":%s}' \
+                    "$([ "${PERIPHERY_OK}" -eq 1 ] && echo true || echo false)" \
+                    "$(json_escape "${PERIPHERY_SERVER_LABEL}")" \
+                    "$(json_escape "${KOMODO_ADDRESS}")" \
+                    "$([ -n "${KOMODO_ONBOARDING_KEY}" ] && echo true || echo false)"
                 ;;
         esac
     done

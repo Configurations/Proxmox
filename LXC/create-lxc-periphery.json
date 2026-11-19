@@ -1,0 +1,143 @@
+{
+  "args": [
+    {
+      "arg": "LXC_ID",
+      "label_fr": "Identifiant LXC (CT ID)",
+      "label_en": "LXC ID (CT ID)",
+      "description_fr": "Numéro unique du container Proxmox (ex: 200, 201…)",
+      "description_en": "Unique Proxmox container ID (e.g. 200, 201…)",
+      "type": "integer",
+      "required": true,
+      "default": 301,
+      "min": 100,
+      "max": 999
+    },
+    {
+      "arg": "LXC_NAME",
+      "label_fr": "Nom du container",
+      "label_en": "Container hostname",
+      "description_fr": "Hostname DNS (lettres, chiffres, tirets — ex: agflow-logs-01)",
+      "description_en": "DNS hostname (letters, digits, dashes — e.g. agflow-logs-01)",
+      "type": "string",
+      "required": true,
+      "default": "ag-periphery-1",
+      "pattern": "^[a-zA-Z0-9-]+$"
+    },
+    {
+      "arg": "KOMODO_ADDRESS",
+      "label_fr": "Adresse du Core Komodo",
+      "label_en": "Komodo Core address",
+      "description_fr": "Adresse du serveur Komodo auquel le periphery se connecte en sortie (ex: https://komodo.example.org)",
+      "description_en": "Address of the Komodo Core the periphery connects out to (e.g. https://komodo.example.org)",
+      "type": "string",
+      "required": true,
+      "default": "https://komodo.example.org"
+    },
+    {
+      "arg": "KOMODO_SERVER_NAME",
+      "label_fr": "Nom du Server Komodo",
+      "label_en": "Komodo Server name",
+      "description_fr": "Nom du Server dans l'UI Komodo. Vide = hostname de la machine (lxc<CTID>/vm<VMID>).",
+      "description_en": "Server name in the Komodo UI. Empty = machine hostname label (lxc<CTID>/vm<VMID>).",
+      "type": "string",
+      "required": false,
+      "default": ""
+    },
+    {
+      "arg": "KOMODO_ONBOARDING_KEY",
+      "label_fr": "Onboarding key Komodo",
+      "label_en": "Komodo onboarding key",
+      "description_fr": "Optionnel. 'Server Onboarding Key' créée dans l'UI Komodo : permet au periphery de créer le Server s'il n'existe pas encore.",
+      "description_en": "Optional. 'Server Onboarding Key' created in the Komodo UI: lets the periphery create the Server if it does not exist yet.",
+      "type": "string",
+      "required": false,
+      "default": ""
+    },
+    {
+      "arg": "STORAGE",
+      "label_fr": "Storage Proxmox",
+      "label_en": "Proxmox storage",
+      "description_fr": "Pool storage pour le rootfs LXC. 'auto' = sélection auto (storage actif compatible 'rootdir' avec le plus d'espace libre). Liste dynamique via 'pvesm status'.",
+      "description_en": "Storage pool for the LXC rootfs. 'auto' = auto-pick (active 'rootdir'-capable storage with most free space). Dynamic list via 'pvesm status'.",
+      "type": "select",
+      "required": false,
+      "default": "auto",
+      "options": [
+        {
+          "value": "auto",
+          "label": "auto (sélection automatique)"
+        }
+      ],
+      "option_script": "pvesm status --content rootdir | awk 'NR>1 && $3==\"active\" {print $1}'"
+    },
+    {
+      "arg": "DISK_SIZE",
+      "label_fr": "Taille du disque (GB)",
+      "label_en": "Disk size (GB)",
+      "description_fr": "Taille du rootfs en GigaBytes",
+      "description_en": "Rootfs size in GigaBytes",
+      "type": "integer",
+      "required": false,
+      "default": 30,
+      "min": 10,
+      "max": 1000
+    },
+    {
+      "arg": "CORES",
+      "label_fr": "Nombre de cœurs CPU",
+      "label_en": "CPU cores",
+      "description_fr": "Nombre de cœurs alloués au container",
+      "description_en": "Number of CPU cores allocated to the container",
+      "type": "integer",
+      "required": false,
+      "default": 4,
+      "min": 1,
+      "max": 64
+    },
+    {
+      "arg": "MEMORY",
+      "label_fr": "RAM (MB)",
+      "label_en": "RAM (MB)",
+      "description_fr": "Mémoire vive allouée en MégaBytes",
+      "description_en": "Memory allocated in MegaBytes",
+      "type": "integer",
+      "required": false,
+      "default": 8192,
+      "min": 512,
+      "max": 524288
+    },
+    {
+      "arg": "SWAP",
+      "label_fr": "Swap (MB)",
+      "label_en": "Swap (MB)",
+      "description_fr": "Swap alloué en MégaBytes",
+      "description_en": "Swap allocated in MegaBytes",
+      "type": "integer",
+      "required": false,
+      "default": 1024,
+      "min": 0,
+      "max": 524288
+    },
+    {
+      "arg": "BRIDGE",
+      "label_fr": "Bridge réseau",
+      "label_en": "Network bridge",
+      "description_fr": "Nom du bridge Proxmox utilisé par eth0",
+      "description_en": "Proxmox bridge name used by eth0",
+      "type": "string",
+      "required": false,
+      "default": "vmbr0"
+    }
+  ],
+  "commands": [
+    "mkdir -p /root/lxc",
+    "cd /root/lxc",
+    "curl -fsSL -o create-lxc.sh https://raw.githubusercontent.com/Configurations/Proxmox/main/LXC/create-lxc.sh",
+    "chmod +x create-lxc.sh",
+    "STORAGE='{STORAGE}' DISK_SIZE={DISK_SIZE} CORES={CORES} MEMORY={MEMORY} SWAP={SWAP} BRIDGE='{BRIDGE}' KOMODO_ADDRESS='{KOMODO_ADDRESS}' KOMODO_SERVER_NAME='{KOMODO_SERVER_NAME}' KOMODO_ONBOARDING_KEY='{KOMODO_ONBOARDING_KEY}' ./create-lxc.sh lxc.sh {LXC_ID} '{LXC_NAME}' --docker --app periphery"
+  ],
+  "tags": [
+    "create_lxc",
+    "periphery"
+  ]
+}
